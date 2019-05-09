@@ -1,0 +1,4 @@
+
+ignore:
+  - "tests/unit_tests.cc"
+  - "tests/catch.hpp"
