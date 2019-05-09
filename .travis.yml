@@ -20,4 +20,5 @@ script:
 - make test
 
 after_success:
+  - gcov -n tests/unit_tests.cc -o .
   - codecov
