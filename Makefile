@@ -41,7 +41,7 @@ $(PROJECT).js: source/web/$(PROJECT)-web.cc
 	$(CXX_web) $(CFLAGS_web) source/web/$(PROJECT)-web.cc -o web/$(PROJECT).js
 
 test: tests/unit_tests.cc
-	$(CXX_nat) $(CFLAGS_nat_debug) tests/unit_tests.cc -o test_debug.out
+	$(CXX_nat) $(CFLAGS_nat_debug) --coverage tests/unit_tests.cc -o test_debug.out
 	./test_debug.out
 	$(CXX_nat) $(CFLAGS_nat) tests/unit_tests.cc -o test_optimized.out
 	./test_optimized.out
