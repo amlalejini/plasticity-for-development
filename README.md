@@ -13,7 +13,7 @@ How do higher-level units differentiate?
 
 #### Dependencies
 
-- [Emscripten](https://emscripten.org/)
+- [Emscripten](https://emscripten.org/) (only if you want to _compile_ the web version)
 
 ## Software
 
