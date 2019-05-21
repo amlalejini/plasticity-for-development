@@ -5,7 +5,15 @@
 
 How do higher-level units differentiate?
 
-I promise to clean this README up later...
+## Running Locally
+
+### Native
+
+### Web
+
+#### Dependencies
+
+- [Emscripten](https://emscripten.org/)
 
 ## Software
 
