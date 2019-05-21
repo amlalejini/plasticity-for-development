@@ -7,6 +7,8 @@
 #include "base/vector.h"
 #include "config/command_line.h"
 
+#include "../DOLWorld.h"
+
 // This is the main function for the NATIVE version of example.
 
 int main(int argc, char* argv[])
