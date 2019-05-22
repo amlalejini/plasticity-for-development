@@ -21,6 +21,7 @@
 // Local includes
 #include "DigitalOrganism.h"
 
+// DOLWorld Configuration
 EMP_BUILD_CONFIG( DOLWorldConfig,
   GROUP(MAIN, "Global Settings"),
   VALUE(SEED, int, -1, "Random number generator seed"),
@@ -37,11 +38,6 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
 
 constexpr size_t TAG_WIDTH = 16;
 
-/// Struct that houses demes.
-// struct DemeVat {
-
-// };
-
 class DOLWorld : public emp::World<DigitalOrganism<TAG_WIDTH>> {
 public:
   using org_t = DigitalOrganism<TAG_WIDTH>;
@@ -53,6 +49,10 @@ public:
   struct CellularHardware {
 
     sgp_hardware_t sgp_hw;
+
+    CellularHardware(emp::Ptr<emp::Random> _rnd, emp::Ptr<inst_lib_t> _inst_lib,
+                     emp::Ptr<event_lib_t> _event_lib)
+      : sgp_hw(_inst_lib, _event_lib, _rnd) { sgp_hw.ResetHardware(); }
 
     // - sensors: emp::vector<size_t> sensors;
     // - sensor refractory state: emp::vector<size_t> refractory_states;
@@ -66,13 +66,12 @@ public:
                                   Facing::S, Facing::SW, Facing::W, Facing::NW};
     static constexpr size_t NUM_DIRECTIONS = 8;                                   ///< Number of neighbors each board space has.
 
-    // - Torodial grid of hardware units.
-    emp::vector<CellularHardware> cells;
+    emp::vector<CellularHardware> cells; ///< Toroidal grid of CellularHardware units
 
   private:
 
-    size_t width;   ///< Width of grid
-    size_t height;  ///< Height of grid
+    size_t width;                        ///< Width of grid
+    size_t height;                       ///< Height of grid
     emp::vector<size_t> neighbor_lookup; ///< Lookup table for neighbors
 
     /// Build neighbor lookup (according to current width and height)
@@ -82,15 +81,13 @@ public:
     size_t CalcNeighbor(size_t id, Facing dir) const;
 
   public:
-    Deme(size_t _width, size_t _height)
+    Deme(size_t _width, size_t _height, emp::Ptr<emp::Random> _rnd,
+        emp::Ptr<inst_lib_t> _inst_lib, emp::Ptr<event_lib_t> _event_lib)
       : width(_width), height(_height)
     {
-      // cells.resize(width * height);
+      cells.resize(width * height, {_rnd, _inst_lib, _event_lib});
       BuildNeighborLookup();
     }
-
-    // todo
-    void ConfigureCellularHardware();
 
     /// Get cell capacity of deme
     size_t GetCellCapacity() const { return cells.size(); }
@@ -113,7 +110,6 @@ public:
     /// Pretty print the neighbor map (useful for debugging)
     void PrintNeighborMap(std::ostream & os = std::cout) const;
   };
-
 
 protected:
 

@@ -37,7 +37,7 @@ TEST_CASE( "DOLWorld Setup", "[world][setup]" ) {
 TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
     using facing_t = DOLWorld::Deme::Facing;
 
-    DOLWorld::Deme deme1x1(1, 1);
+    DOLWorld::Deme deme1x1(1, 1, nullptr, nullptr, nullptr);
     REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::N) == 0);
     REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::NE) == 0);
     REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::E) == 0);
@@ -47,7 +47,7 @@ TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
     REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::W) == 0);
     REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::NW) == 0);
 
-    DOLWorld::Deme deme2x2(2, 2);
+    DOLWorld::Deme deme2x2(2, 2, nullptr, nullptr, nullptr);
     // Check cell 0's neighbors
     REQUIRE(deme2x2.GetNeighboringCellID(0, facing_t::N) == 2);
     REQUIRE(deme2x2.GetNeighboringCellID(0, facing_t::NE) == 3);
@@ -67,7 +67,7 @@ TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
     REQUIRE(deme2x2.GetNeighboringCellID(3, facing_t::W) == 2);
     REQUIRE(deme2x2.GetNeighboringCellID(3, facing_t::NW) == 0);
 
-    DOLWorld::Deme deme4x4(4, 4);
+    DOLWorld::Deme deme4x4(4, 4, nullptr, nullptr, nullptr);
     // Pretty print the neighbor map
     deme4x4.PrintNeighborMap();
     REQUIRE(deme4x4.GetNeighboringCellID(5, facing_t::N) == 9);
