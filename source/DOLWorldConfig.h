@@ -26,6 +26,6 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(MIN_ARGUMENT_VAL, size_t, 0, "Minimum value for SignalGP instruction arguments."),
   VALUE(MAX_ARGUMENT_VAL, size_t, 15, "Maximum value for SignalGP instruction arguments."),
 
-);
+)
 
 #endif

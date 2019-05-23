@@ -118,9 +118,9 @@ protected:
 
   // Internal functions
   void InitConfigs(DOLWorldConfig & config);
-  void InitPop();
-  void InitPop_Random();
-  void InitPop_Load();
+  void InitPop(DOLWorldConfig & config);
+  void InitPop_Random(DOLWorldConfig & config);
+  void InitPop_Load(DOLWorldConfig & config);
 
 public:
 
@@ -239,10 +239,10 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
 }
 
 /// Initialize the population
-void DOLWorld::InitPop() {
+void DOLWorld::InitPop(DOLWorldConfig & config) {
   // How should we initialize the population?
   if (INIT_POP_MODE == "random") {
-    InitPop_Random();
+    InitPop_Random(config);
   } else {
     emp_assert(false, "Invalid INIT_POP_MODE (", INIT_POP_MODE, "). Exiting.");
     exit(-1);
@@ -250,16 +250,19 @@ void DOLWorld::InitPop() {
 }
 
 /// Initialize the population with random digital organisms
-void DOLWorld::InitPop_Random() {
+void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
+  // Make space!
   pop.resize(MAX_POP_SIZE);
-  // now, there's space for MAX_POP_SIZE orgs, but no orgs have been injected
+  // Now, there's space for MAX_POP_SIZE orgs, but no orgs have been injected
   // - Note, there's no population structure here (at the deme level), so
   //   we're just going to fill things up from beginning to end.
   emp_assert(INIT_POP_SIZE <= MAX_POP_SIZE, "INIT_POP_SIZE (", INIT_POP_SIZE, ") cannot exceed MAX_POP_SIZE (", MAX_POP_SIZE, ")!");
   for (size_t i = 0; i < INIT_POP_SIZE; ++i) {
-
-    // InjectAt(, i);
+    InjectAt(GenRandDigitalOrganismGenome<TAG_WIDTH>(*random_ptr, *inst_lib, config), i);
   }
+  // WARNING: All initial organisms in the population will have independent ancestry.
+  //          - We could do a little extra work to tie their ancestry together (e.g.,
+  //            have a dummy common ancestor).
 }
 
 void DOLWorld::Setup(DOLWorldConfig & config) {
@@ -267,7 +270,10 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   InitConfigs(config);
   // todo - finish function
 
-  InitPop();
+  inst_lib = emp::NewPtr<inst_lib_t>();
+  inst_lib->AddInst("Inc", sgp_hardware_t::Inst_Inc, 1, "Increment value in local memory Arg1");
+  event_lib = emp::NewPtr<event_lib_t>();
+  InitPop(config);
 }
 
 #endif
