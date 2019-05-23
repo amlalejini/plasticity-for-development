@@ -85,7 +85,9 @@ public:
         emp::Ptr<inst_lib_t> _inst_lib, emp::Ptr<event_lib_t> _event_lib)
       : width(_width), height(_height)
     {
-      cells.resize(width * height, {_rnd, _inst_lib, _event_lib});
+      for (size_t i = 0; i < width*height; ++i) {
+        cells.emplace_back(_rnd, _inst_lib, _event_lib);
+      }
       BuildNeighborLookup();
     }
 
