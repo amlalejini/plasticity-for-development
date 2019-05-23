@@ -11,6 +11,9 @@
 #define _DIGITAL_ORGANISM_H
 
 #include "hardware/EventDrivenGP.h"
+#include "hardware/signalgp_utils.h"
+
+#include "DOLWorldConfig.h"
 
 template<size_t TAG_WIDTH>
 class DigitalOrganism {
@@ -41,6 +44,7 @@ protected:
   Phenotype phenotype;
 
 public:
+  DigitalOrganism(const Genome & _genome) : genome(_genome) {}
 
   /// Get reference to digital organism genome.
   Genome & GetGenome() { return genome; }
@@ -55,5 +59,21 @@ public:
   const Phenotype & GetPhenotype() const { return phenotype; }
 
 };
+
+// template<size_t W>
+// DigitalOrganism<W> GenRandDigitalOrganism(emp::Random & rnd,
+//                                                   const emp::InstLib<emp::EventDrivenGP_AW<W>> & inst_lib,
+//                                                   const DOLWorldConfig & config)
+// {
+//   /* const program_t & _program, const tag_t & _birth_tag */
+//   DigitalOrganism<W>::Genome genome(emp::GenRandSignalGPProgram<W>(rnd, inst_lib,
+//                                                                    config.MIN_FUNCTION_CNT(),
+//                                                                    config.MAX_FUNCTION_CNT(),
+//                                                                    config.MIN_FUNCTION_LEN(),
+//                                                                    config.MAX_FUNCTION_LEN(),
+//                                                                    config.MIN_ARGUMENT_VAL(),
+//                                                                    config.MAX_ARGUMENT_VAL()),
+//                                     emp::GenRandSignalGPTag<W>(rnd));
+// }
 
 #endif

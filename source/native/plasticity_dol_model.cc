@@ -8,12 +8,25 @@
 #include "config/command_line.h"
 
 #include "../DOLWorld.h"
+#include "../DOLWorldConfig.h"
 
 // This is the main function for the NATIVE version of example.
 
 int main(int argc, char* argv[])
 {
-  emp::vector<std::string> args = emp::cl::args_to_strings(argc, argv);
+  DOLWorldConfig config;
+  auto args = emp::cl::ArgManager(argc, argv);
+  if (args.ProcessConfigOptions(config, std::cout, "DOLWorldConfig.cfg", "Memic-macros.h") == false) exit(0);
+  if (args.TestUnknown() == false) exit(0);  // If there are leftover args, throw an error.
+  // Write to screen how the experiment is configured
+  std::cout << "==============================" << std::endl;
+  std::cout << "|    How am I configured?    |" << std::endl;
+  std::cout << "==============================" << std::endl;
+  config.Write(std::cout);
+  std::cout << "==============================\n" << std::endl;
 
-  std::cout << "Hello, world!" << std::endl;
+  emp::Random rnd(config.SEED());
+  DOLWorld world(rnd);
+
+  world.Setup(config);
 }

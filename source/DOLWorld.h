@@ -20,21 +20,7 @@
 
 // Local includes
 #include "DigitalOrganism.h"
-
-// DOLWorld Configuration
-EMP_BUILD_CONFIG( DOLWorldConfig,
-  GROUP(MAIN, "Global Settings"),
-  VALUE(SEED, int, -1, "Random number generator seed"),
-  VALUE(UPDATES, size_t, 1000, "Number of updates to run the experiment."),
-  VALUE(CPU_CYCLES_PER_UPDATE, size_t, 30, "Number of CPU cycles to distribute to each cell every update."),
-  VALUE(INIT_POP_SIZE, size_t, 1, "How many organisms should we seed the world with?"),
-  VALUE(MAX_POP_SIZE, size_t, 1000, "What is the maximum size of the population?"),
-
-  GROUP(DEME, "Deme Settings"),
-  VALUE(DEME_WIDTH, size_t, 5, "What is the maximum cell-width of a deme?"),
-  VALUE(DEME_HEIGHT, size_t, 5, "What is the maximum cell-height of a deme?"),
-
-);
+#include "DOLWorldConfig.h"
 
 constexpr size_t TAG_WIDTH = 16;
 
@@ -42,6 +28,7 @@ class DOLWorld : public emp::World<DigitalOrganism<TAG_WIDTH>> {
 public:
   using org_t = DigitalOrganism<TAG_WIDTH>;
   using sgp_hardware_t = emp::EventDrivenGP_AW<TAG_WIDTH>;
+  using sgp_program_t = typename sgp_hardware_t::Program;
   using inst_lib_t = typename sgp_hardware_t::inst_lib_t;
   using event_lib_t = typename sgp_hardware_t::event_lib_t;
 
@@ -69,7 +56,6 @@ public:
     emp::vector<CellularHardware> cells; ///< Toroidal grid of CellularHardware units
 
   private:
-
     size_t width;                        ///< Width of grid
     size_t height;                       ///< Height of grid
     emp::vector<size_t> neighbor_lookup; ///< Lookup table for neighbors
@@ -121,12 +107,20 @@ protected:
   size_t CPU_CYCLES_PER_UPDATE;
   size_t INIT_POP_SIZE;
   size_t MAX_POP_SIZE;
+  std::string INIT_POP_MODE;
   // DEME Configuration Settings
   size_t DEME_WIDTH;
   size_t DEME_HEIGHT;
 
+  // Non-configuration member variables
+  emp::Ptr<inst_lib_t> inst_lib;
+  emp::Ptr<event_lib_t> event_lib;
+
+  // Internal functions
   void InitConfigs(DOLWorldConfig & config);
   void InitPop();
+  void InitPop_Random();
+  void InitPop_Load();
 
 public:
 
@@ -238,14 +232,42 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   CPU_CYCLES_PER_UPDATE = config.CPU_CYCLES_PER_UPDATE();
   INIT_POP_SIZE = config.INIT_POP_SIZE();
   MAX_POP_SIZE = config.MAX_POP_SIZE();
+  INIT_POP_MODE = config.INIT_POP_MODE();
   // DEME Configuration Settings
   DEME_WIDTH = config.DEME_WIDTH();
   DEME_HEIGHT = config.DEME_HEIGHT();
 }
 
+/// Initialize the population
+void DOLWorld::InitPop() {
+  // How should we initialize the population?
+  if (INIT_POP_MODE == "random") {
+    InitPop_Random();
+  } else {
+    emp_assert(false, "Invalid INIT_POP_MODE (", INIT_POP_MODE, "). Exiting.");
+    exit(-1);
+  }
+}
+
+/// Initialize the population with random digital organisms
+void DOLWorld::InitPop_Random() {
+  pop.resize(MAX_POP_SIZE);
+  // now, there's space for MAX_POP_SIZE orgs, but no orgs have been injected
+  // - Note, there's no population structure here (at the deme level), so
+  //   we're just going to fill things up from beginning to end.
+  emp_assert(INIT_POP_SIZE <= MAX_POP_SIZE, "INIT_POP_SIZE (", INIT_POP_SIZE, ") cannot exceed MAX_POP_SIZE (", MAX_POP_SIZE, ")!");
+  for (size_t i = 0; i < INIT_POP_SIZE; ++i) {
+
+    // InjectAt(, i);
+  }
+}
+
 void DOLWorld::Setup(DOLWorldConfig & config) {
+  std::cout << "DOLWorld - Setup" << std::endl;
   InitConfigs(config);
   // todo - finish function
+
+  InitPop();
 }
 
 #endif
