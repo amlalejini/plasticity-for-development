@@ -23,8 +23,8 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(MAX_FUNCTION_CNT, size_t, 64, "Maximum allowed number of functions in a SignalGP program."),
   VALUE(MIN_FUNCTION_LEN, size_t, 1, "Minimum number of instructions allowed in a SignalGP program function."),
   VALUE(MAX_FUNCTION_LEN, size_t, 256, "Maximum number of instructions allowed in a SignalGP program function."),
-  VALUE(MIN_ARGUMENT_VAL, size_t, 0, "Minimum value for SignalGP instruction arguments."),
-  VALUE(MAX_ARGUMENT_VAL, size_t, 15, "Maximum value for SignalGP instruction arguments."),
+  VALUE(MIN_ARGUMENT_VAL, int, 0, "Minimum value for SignalGP instruction arguments."),
+  VALUE(MAX_ARGUMENT_VAL, int, 15, "Maximum value for SignalGP instruction arguments."),
 
 )
 

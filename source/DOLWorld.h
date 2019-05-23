@@ -22,10 +22,9 @@
 #include "DigitalOrganism.h"
 #include "DOLWorldConfig.h"
 
-constexpr size_t TAG_WIDTH = 16;
-
-class DOLWorld : public emp::World<DigitalOrganism<TAG_WIDTH>> {
+class DOLWorld : public emp::World<DigitalOrganism<16>> {
 public:
+  static constexpr size_t TAG_WIDTH = 16;
   using org_t = DigitalOrganism<TAG_WIDTH>;
   using sgp_hardware_t = emp::EventDrivenGP_AW<TAG_WIDTH>;
   using sgp_program_t = typename sgp_hardware_t::Program;
@@ -111,8 +110,17 @@ protected:
   // DEME Configuration Settings
   size_t DEME_WIDTH;
   size_t DEME_HEIGHT;
+  // PROGRAM Configuration Settings
+  size_t MIN_FUNCTION_CNT;
+  size_t MAX_FUNCTION_CNT;
+  size_t MIN_FUNCTION_LEN;
+  size_t MAX_FUNCTION_LEN;
+  int MIN_ARGUMENT_VAL;
+  int MAX_ARGUMENT_VAL;
 
   // Non-configuration member variables
+  bool setup = false;
+
   emp::Ptr<inst_lib_t> inst_lib;
   emp::Ptr<event_lib_t> event_lib;
 
@@ -127,7 +135,12 @@ public:
   DOLWorld() {}
   DOLWorld(emp::Random & r) : emp::World<org_t>(r) {}
 
-  ~DOLWorld() {}
+  ~DOLWorld() {
+    if (setup) {
+      inst_lib.Delete();
+      event_lib.Delete();
+    }
+  }
 
   size_t GetCPUCyclesPerUpdate() const { return CPU_CYCLES_PER_UPDATE; }
   size_t GetDemeWidth() const { return DEME_WIDTH; };
@@ -226,6 +239,7 @@ void DOLWorld::Deme::PrintNeighborMap(std::ostream & os /*= std::cout*/) const {
 //                          DOLWorld member definitions
 // =============================================================================
 
+/// Localize configuration settings.
 void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   // MAIN Configuration Settings
   UPDATES = config.UPDATES();
@@ -236,6 +250,13 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   // DEME Configuration Settings
   DEME_WIDTH = config.DEME_WIDTH();
   DEME_HEIGHT = config.DEME_HEIGHT();
+  // PROGRAM Configuration Settings
+  MIN_FUNCTION_CNT = config.MIN_FUNCTION_CNT();
+  MAX_FUNCTION_CNT = config.MAX_FUNCTION_CNT();
+  MIN_FUNCTION_LEN = config.MIN_FUNCTION_LEN();
+  MAX_FUNCTION_LEN = config.MAX_FUNCTION_LEN();
+  MIN_ARGUMENT_VAL = config.MIN_ARGUMENT_VAL();
+  MAX_ARGUMENT_VAL = config.MAX_ARGUMENT_VAL();
 }
 
 /// Initialize the population
@@ -265,8 +286,15 @@ void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
   //            have a dummy common ancestor).
 }
 
+/// Setup the experiment.
 void DOLWorld::Setup(DOLWorldConfig & config) {
   std::cout << "DOLWorld - Setup" << std::endl;
+
+  if (setup) {
+    emp_assert(false, "Cannot Setup DOLWorld more than once!");
+    exit(-1);
+  }
+
   InitConfigs(config);
   // todo - finish function
 
@@ -274,6 +302,8 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   inst_lib->AddInst("Inc", sgp_hardware_t::Inst_Inc, 1, "Increment value in local memory Arg1");
   event_lib = emp::NewPtr<event_lib_t>();
   InitPop(config);
+
+  setup = true;
 }
 
 #endif

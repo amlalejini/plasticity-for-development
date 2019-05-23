@@ -20,9 +20,9 @@ class DigitalOrganism {
 public:
   struct Genome;
   struct Phenotype;
-
-  using program_t = typename emp::EventDrivenGP_AW<TAG_WIDTH>::Program;
-  using tag_t = typename emp::EventDrivenGP_AW<TAG_WIDTH>::affinity_t;   // Actual type: BitSet<TAG_WIDTH>
+  using sgp_hardware_t = typename emp::EventDrivenGP_AW<TAG_WIDTH>;
+  using program_t = typename sgp_hardware_t::Program;
+  using tag_t = typename sgp_hardware_t::affinity_t;   // Actual type: BitSet<TAG_WIDTH>
 
   struct Genome {
     program_t program;           /// Organism program (a SignalGP program)
