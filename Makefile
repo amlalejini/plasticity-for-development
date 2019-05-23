@@ -3,7 +3,7 @@ PROJECT := plasticity_dol_model
 EMP_DIR := ../Empirical/source
 
 # Flags to use regardless of compiler
-CFLAGS_all := -Wall -Wno-unused-function -std=c++17 -I$(EMP_DIR)/ -I./source/
+CFLAGS_all := -Wall -Wno-unused-function -pedantic -std=c++17 -I$(EMP_DIR)/ -I./source/
 
 # Native compiler information
 CXX_nat := g++-8
