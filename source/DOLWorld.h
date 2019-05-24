@@ -34,6 +34,7 @@ public:
   /// Hardware unit that each cell in a deme 'runs' on
   struct CellularHardware {
 
+    size_t cell_id = 0;
     sgp_hardware_t sgp_hw;
 
     CellularHardware(emp::Ptr<emp::Random> _rnd, emp::Ptr<inst_lib_t> _inst_lib,
@@ -52,12 +53,13 @@ public:
                                   Facing::S, Facing::SW, Facing::W, Facing::NW};
     static constexpr size_t NUM_DIRECTIONS = 8;                                   ///< Number of neighbors each board space has.
 
-    emp::vector<CellularHardware> cells; ///< Toroidal grid of CellularHardware units
-
   private:
+    size_t deme_id = 0;                  ///< ID associated with deme. Corresponds to position in world population.
+    bool deme_active = false;            ///< Is this deme actively running?
     size_t width;                        ///< Width of grid
     size_t height;                       ///< Height of grid
     emp::vector<size_t> neighbor_lookup; ///< Lookup table for neighbors
+    emp::vector<CellularHardware> cells; ///< Toroidal grid of CellularHardware units
 
     /// Build neighbor lookup (according to current width and height)
     void BuildNeighborLookup();
@@ -72,9 +74,16 @@ public:
     {
       for (size_t i = 0; i < width*height; ++i) {
         cells.emplace_back(_rnd, _inst_lib, _event_lib);
+        cells.back().cell_id = i; // Cell id corresponds to position in cells vector
       }
       BuildNeighborLookup();
     }
+
+    /// Get this deme's id
+    size_t GetDemeID() const { return deme_id; }
+
+    /// Is deme active?
+    bool IsActive() const { return deme_active; }
 
     /// Get cell capacity of deme
     size_t GetCellCapacity() const { return cells.size(); }
@@ -88,8 +97,35 @@ public:
     /// Given x,y coordinate, return cell ID
     size_t GetCellID(size_t x, size_t y) const { return (y * width) + x; }
 
+    /// Get cell at position ID (outsource bounds checking to emp::vector)
+    CellularHardware & GetCell(size_t id) { return cells[id]; }
+
+    /// Get const cell at position ID (outsource bounds checking to emp::vector)
+    const CellularHardware & GetCell(size_t id) const { return cells[id]; }
+
     /// Given a cell ID and facing (of that cell), return the appropriate neighboring cell ID
     size_t GetNeighboringCellID(size_t id, Facing dir) const { return neighbor_lookup[id*NUM_DIRECTIONS + (size_t)dir]; }
+
+    /// Set this deme's ID
+    void SetDemeID(size_t id) { deme_id = id; }
+
+    /// Set SignalGP hardware (on cellular hardware) maximum thread count
+    void SetCellHardwareMaxThreads(size_t val);
+
+    /// Set SignalGP hardware (on cellular hardware) maximum call depth
+    void SetCellHardwareMaxCallDepth(size_t val);
+
+    /// Set SignalGP hardware (on cellular hardware) minimum tag matching threshold
+    void SetCellHardwareMinTagMatchThreshold(double val);
+
+    /// Set SignalGP hardware (on cellular hardware) tie break procedure
+    void SetCellHardwareStochasticTieBreaks(bool val);
+
+    /// Activate deme - todo - maybe more required to activate deme (e.g., loading a digital organism)
+    void ActivateDeme() { deme_active = true; }
+
+    /// Deactivate deme - todo - maybe more needs to happen on deativate?
+    void DeactivateDeme() { deme_active = false; }
 
     /// Return a string representation of the given facing direction (useful for debugging)
     std::string FacingStr(Facing dir) const;
@@ -110,6 +146,10 @@ protected:
   // DEME Configuration Settings
   size_t DEME_WIDTH;
   size_t DEME_HEIGHT;
+  // CELLULAR HARDWARE Configuration Settings
+  size_t SGP_MAX_THREAD_CNT;
+  size_t SGP_MAX_CALL_DEPTH;
+  double SGP_MIN_TAG_MATCH_THRESHOLD;
   // PROGRAM Configuration Settings
   size_t MIN_FUNCTION_CNT;
   size_t MAX_FUNCTION_CNT;
@@ -124,11 +164,15 @@ protected:
   emp::Ptr<inst_lib_t> inst_lib;
   emp::Ptr<event_lib_t> event_lib;
 
+  emp::vector<Deme> demes;
+
   // Internal functions
   void InitConfigs(DOLWorldConfig & config);
   void InitPop(DOLWorldConfig & config);
   void InitPop_Random(DOLWorldConfig & config);
   void InitPop_Load(DOLWorldConfig & config);
+
+  void SetupDemeHardware();
 
 public:
 
@@ -146,6 +190,13 @@ public:
   size_t GetDemeWidth() const { return DEME_WIDTH; };
   size_t GetDemeHeight() const { return DEME_HEIGHT; };
   size_t GetDemeCapacity() const { return DEME_WIDTH * DEME_HEIGHT; };
+
+  /// Get deme @ position ID
+  Deme & GetDeme(size_t id) { return demes[id]; }
+  const Deme & GetDeme(size_t id) const { return demes[id]; }
+
+  /// Just give 'em access to all da demes!
+  emp::vector<Deme> & GetDemes() { return demes; }
 
   void Reset(DOLWorldConfig & config);
   void Setup(DOLWorldConfig & config);
@@ -208,6 +259,34 @@ size_t DOLWorld::Deme::CalcNeighbor(size_t id, Facing dir) const {
   return GetCellID(facing_x, facing_y);
 }
 
+/// Set SignalGP hardware (on cellular hardware) maximum thread count
+void DOLWorld::Deme::SetCellHardwareMaxThreads(size_t val) {
+  for (CellularHardware & cell : cells) {
+    cell.sgp_hw.SetMaxCores(val);
+  }
+}
+
+/// Set SignalGP hardware (on cellular hardware) maximum call depth
+void DOLWorld::Deme::SetCellHardwareMaxCallDepth(size_t val) {
+  for (CellularHardware & cell : cells) {
+    cell.sgp_hw.SetMaxCallDepth(val);
+  }
+}
+
+/// Set SignalGP hardware (on cellular hardware) minimum tag matching threshold
+void DOLWorld::Deme::SetCellHardwareMinTagMatchThreshold(double val) {
+  for (CellularHardware & cell : cells) {
+    cell.sgp_hw.SetMinBindThresh(val);
+  }
+}
+
+/// Set SignalGP hardware (on cellular hardware) tie break procedure
+void DOLWorld::Deme::SetCellHardwareStochasticTieBreaks(bool val) {
+  for (CellularHardware & cell : cells) {
+    cell.sgp_hw.SetStochasticFunCall(val);
+  }
+}
+
 std::string DOLWorld::Deme::FacingStr(Facing dir) const {
   switch (dir) {
     case Facing::N: return "N";
@@ -250,6 +329,10 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   // DEME Configuration Settings
   DEME_WIDTH = config.DEME_WIDTH();
   DEME_HEIGHT = config.DEME_HEIGHT();
+  // CELLULAR HARDWARE Configuration Settings
+  SGP_MAX_THREAD_CNT = config.SGP_MAX_THREAD_CNT();
+  SGP_MAX_CALL_DEPTH = config.SGP_MAX_CALL_DEPTH();
+  SGP_MIN_TAG_MATCH_THRESHOLD = config.SGP_MIN_TAG_MATCH_THRESHOLD();
   // PROGRAM Configuration Settings
   MIN_FUNCTION_CNT = config.MIN_FUNCTION_CNT();
   MAX_FUNCTION_CNT = config.MAX_FUNCTION_CNT();
@@ -286,6 +369,25 @@ void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
   //            have a dummy common ancestor).
 }
 
+/// Setup the Deme Hardware (only called by DOLWorld::Setup)
+void DOLWorld::SetupDemeHardware() {
+  std::cout << "DOLWorld - Setup - DemeHardware" << std::endl;
+  demes.clear();
+
+  // Add one deme hardware unit for every possible member of the population
+  for (size_t i = 0; i < MAX_POP_SIZE; ++i) {
+    /*Deme(size_t _width, size_t _height, emp::Ptr<emp::Random> _rnd,
+           emp::Ptr<inst_lib_t> _inst_lib, emp::Ptr<event_lib_t> _event_lib)*/
+    demes.emplace_back(DEME_WIDTH, DEME_HEIGHT, random_ptr, inst_lib, event_lib);
+    demes.back().SetDemeID(i); // Associate deme with particular position in pop vector
+    demes.back().SetCellHardwareMaxThreads(SGP_MAX_THREAD_CNT);
+    demes.back().SetCellHardwareMaxCallDepth(SGP_MAX_CALL_DEPTH);
+    demes.back().SetCellHardwareMinTagMatchThreshold(SGP_MIN_TAG_MATCH_THRESHOLD);
+    demes.back().SetCellHardwareStochasticTieBreaks(false); // make tag-based referencing deterministic
+    // TODO - any non-constructor deme configuration
+  }
+}
+
 /// Setup the experiment.
 void DOLWorld::Setup(DOLWorldConfig & config) {
   std::cout << "DOLWorld - Setup" << std::endl;
@@ -296,14 +398,23 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   }
 
   InitConfigs(config);
-  // todo - finish function
 
+  // todo - setup setup signalgp instruction/event libraries
+  SetupDemeHardware();
+
+  // todo - setup environment
+  // todo - setup systematics
+
+  // todo - finish function
   inst_lib = emp::NewPtr<inst_lib_t>();
   inst_lib->AddInst("Inc", sgp_hardware_t::Inst_Inc, 1, "Increment value in local memory Arg1");
   event_lib = emp::NewPtr<event_lib_t>();
   InitPop(config);
 
+  // todo - configure world appropriately (e.g., asynchronous, mixed)
+
   setup = true;
+  emp_assert(pop.size() == demes.size(), "SETUP ERROR! Population vector size (", pop.size(), ")", "does not match deme vector size (", demes.size(), ").");
 }
 
 #endif

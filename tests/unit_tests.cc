@@ -65,6 +65,7 @@ TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
   using facing_t = DOLWorld::Deme::Facing;
 
   DOLWorld::Deme deme1x1(1, 1, nullptr, nullptr, nullptr);
+  deme1x1.PrintNeighborMap();
   REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::N) == 0);
   REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::NE) == 0);
   REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::E) == 0);
@@ -96,7 +97,7 @@ TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
 
   DOLWorld::Deme deme4x4(4, 4, nullptr, nullptr, nullptr);
   // Pretty print the neighbor map
-  deme4x4.PrintNeighborMap();
+  // deme4x4.PrintNeighborMap();
   REQUIRE(deme4x4.GetNeighboringCellID(5, facing_t::N) == 9);
   REQUIRE(deme4x4.GetNeighboringCellID(5, facing_t::NE) == 10);
   REQUIRE(deme4x4.GetNeighboringCellID(5, facing_t::E) == 6);
@@ -155,5 +156,40 @@ TEST_CASE ( "DOLWorld Setup - Random Population Initialization", "[world][setup]
   for (size_t i = 0; i < world2.GetSize(); ++i) {
     if (!world2.IsOccupied(i)) continue;
     REQUIRE(ValidateDigitalOrganismGenome<DOLWorld::TAG_WIDTH>(config, world2.GetGenomeAt(i)));
+  }
+}
+
+TEST_CASE ( "DOLWorld Setup - Deme Hardware Setup", "[world][setup][deme]" ) {
+  using deme_t = DOLWorld::Deme;
+  using cell_hw_t = DOLWorld::CellularHardware;
+  // Create a configuration object
+  DOLWorldConfig config;
+  config.SEED(1);
+  config.INIT_POP_SIZE(10);
+  config.MAX_POP_SIZE(200);
+  config.INIT_POP_MODE("random");
+  config.SGP_MAX_THREAD_CNT(2);
+  config.SGP_MAX_CALL_DEPTH(512);
+  config.SGP_MIN_TAG_MATCH_THRESHOLD(0.5);
+
+  // Create a new DOLWorld
+  emp::Random rnd(config.SEED());
+  DOLWorld world(rnd);
+  world.Setup(config);
+
+  // Check deme configuration
+  REQUIRE(world.GetDemes().size() == config.MAX_POP_SIZE());
+  for (size_t i = 0; i < config.MAX_POP_SIZE(); ++i) {
+    deme_t & deme = world.GetDeme(i);
+    REQUIRE(deme.GetDemeID() == i); // Deme IDs should match up with population IDs
+    // Check cellular hardware configuration
+    for (size_t k = 0; k < config.DEME_HEIGHT() * config.DEME_WIDTH(); ++k) {
+      cell_hw_t & cell = deme.GetCell(k);
+      REQUIRE(cell.sgp_hw.GetMaxCores() == config.SGP_MAX_THREAD_CNT());
+      REQUIRE(cell.sgp_hw.GetMaxCallDepth() == config.SGP_MAX_CALL_DEPTH());
+      REQUIRE(cell.sgp_hw.GetMinBindThresh() == config.SGP_MIN_TAG_MATCH_THRESHOLD());
+      REQUIRE(cell.sgp_hw.IsStochasticFunCall() == false);
+      REQUIRE(cell.cell_id == k);
+    }
   }
 }

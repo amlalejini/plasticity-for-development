@@ -18,6 +18,11 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(DEME_WIDTH, size_t, 5, "What is the maximum cell-width of a deme?"),
   VALUE(DEME_HEIGHT, size_t, 5, "What is the maximum cell-height of a deme?"),
 
+  GROUP(CELLULAR_HARDWARE, "Within-deme cellular hardware unit settings (SignalGP CPUs + extras)"),
+  VALUE(SGP_MAX_THREAD_CNT, size_t, 4, "What is the maximum number of concurrently running threads allowed on a SignalGP CPU?"),
+  VALUE(SGP_MAX_CALL_DEPTH, size_t, 128 , "What is the maximum call stack depth allowed on a SignalGP CPU?"),
+  VALUE(SGP_MIN_TAG_MATCH_THRESHOLD, double, 0.0, "What is the tag matching threshold required for successful tag-based references on a SignalGP CPU?"),
+
   GROUP(PROGRAM, "SignalGP Program Settings"),
   VALUE(MIN_FUNCTION_CNT, size_t, 1, "Minimum allowed number of functions in a SignalGP program."),
   VALUE(MAX_FUNCTION_CNT, size_t, 64, "Maximum allowed number of functions in a SignalGP program."),
