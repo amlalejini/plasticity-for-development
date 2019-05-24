@@ -179,6 +179,7 @@ TEST_CASE ( "DOLWorld Setup - Deme Hardware Setup", "[world][setup][deme]" ) {
 
   // Check deme configuration
   REQUIRE(world.GetDemes().size() == config.MAX_POP_SIZE());
+  size_t active_cell_cnt = 0;
   for (size_t i = 0; i < config.MAX_POP_SIZE(); ++i) {
     deme_t & deme = world.GetDeme(i);
     REQUIRE(deme.GetDemeID() == i); // Deme IDs should match up with population IDs
@@ -190,6 +191,12 @@ TEST_CASE ( "DOLWorld Setup - Deme Hardware Setup", "[world][setup][deme]" ) {
       REQUIRE(cell.sgp_hw.GetMinBindThresh() == config.SGP_MIN_TAG_MATCH_THRESHOLD());
       REQUIRE(cell.sgp_hw.IsStochasticFunCall() == false);
       REQUIRE(cell.cell_id == k);
+      if (cell.active) {
+        ++active_cell_cnt;
+        REQUIRE(cell.sgp_hw.GetProgram().GetSize() > 0);
+        REQUIRE(cell.sgp_hw.GetProgram().GetInstCnt() > 0);
+      }
     }
   }
+  REQUIRE(active_cell_cnt == config.INIT_POP_SIZE());
 }

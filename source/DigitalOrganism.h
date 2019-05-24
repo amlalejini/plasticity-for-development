@@ -40,11 +40,15 @@ public:
   };
 
 protected:
+  size_t org_id = 0;
   Genome genome;
   Phenotype phenotype;
 
 public:
   DigitalOrganism(const Genome & _genome) : genome(_genome) {}
+
+  /// Get organism id
+  size_t GetOrgID() const { return org_id; }
 
   /// Get reference to digital organism genome.
   Genome & GetGenome() { return genome; }
@@ -57,6 +61,9 @@ public:
 
   /// Get const reference to digital organism's phenotype.
   const Phenotype & GetPhenotype() const { return phenotype; }
+
+  /// Set organism id
+  void SetOrgID(size_t val) { org_id = val; }
 
 };
 

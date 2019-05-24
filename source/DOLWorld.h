@@ -11,6 +11,9 @@
 #ifndef _DOL_WORLD_H
 #define _DOL_WORLD_H
 
+#include <functional>
+#include <iostream>
+
 // Empirical includes
 #include "base/Ptr.h"
 #include "base/vector.h"
@@ -24,18 +27,30 @@
 
 class DOLWorld : public emp::World<DigitalOrganism<16>> {
 public:
+  // static constants
   static constexpr size_t TAG_WIDTH = 16;
+  // Forward declarations
+  struct CellularHardware;
+  class Deme;
+  // public aliases
   using org_t = DigitalOrganism<TAG_WIDTH>;
   using sgp_hardware_t = emp::EventDrivenGP_AW<TAG_WIDTH>;
   using sgp_program_t = typename sgp_hardware_t::Program;
+  using sgp_memory_t = typename sgp_hardware_t::memory_t;
+  using tag_t = typename sgp_hardware_t::affinity_t;
   using inst_lib_t = typename sgp_hardware_t::inst_lib_t;
   using event_lib_t = typename sgp_hardware_t::event_lib_t;
 
+  using deme_seed_fun_t = std::function<void(Deme&, org_t&)>;
+
   /// Hardware unit that each cell in a deme 'runs' on
+  /// Note, CellularHardware can't extend SGP hardware because SGP programs
+  /// contain instruction libraries templated off of SGP hardware =/= inst_lib<CellularHardware>
   struct CellularHardware {
 
     size_t cell_id = 0;
     sgp_hardware_t sgp_hw;
+    bool active = false;
 
     CellularHardware(emp::Ptr<emp::Random> _rnd, emp::Ptr<inst_lib_t> _inst_lib,
                      emp::Ptr<event_lib_t> _event_lib)
@@ -43,6 +58,20 @@ public:
 
     // - sensors: emp::vector<size_t> sensors;
     // - sensor refractory state: emp::vector<size_t> refractory_states;
+
+    /// On reset:
+    /// - reset signalgp hardware & program
+    /// - todo - clear out traits (non-permanent ones)
+    void Reset() { sgp_hw.ResetProgram(); active = false; }
+
+    void ActivateCell(const sgp_program_t & program,
+                      const tag_t & init_tag,
+                      const sgp_memory_t & init_mem,
+                      bool init_main) {
+      sgp_hw.SetProgram(program);
+      sgp_hw.SpawnCore(init_tag, sgp_hw.GetMinBindThresh(), init_mem, init_main);
+      active = true;
+    }
   };
 
   /// A 'deme' of CellularHardware.
@@ -122,10 +151,18 @@ public:
     void SetCellHardwareStochasticTieBreaks(bool val);
 
     /// Activate deme - todo - maybe more required to activate deme (e.g., loading a digital organism)
-    void ActivateDeme() { deme_active = true; }
+    /// - used to flag that deme is currently active (running)
+    void ActivateDeme() {
+      deme_active = true;
+    }
 
     /// Deactivate deme - todo - maybe more needs to happen on deativate?
-    void DeactivateDeme() { deme_active = false; }
+    void DeactivateDeme() {
+      for (CellularHardware & cell : cells) {
+        cell.Reset(); // Reset cell
+      }
+      deme_active = false;
+    }
 
     /// Return a string representation of the given facing direction (useful for debugging)
     std::string FacingStr(Facing dir) const;
@@ -166,6 +203,8 @@ protected:
 
   emp::vector<Deme> demes;
 
+  deme_seed_fun_t fun_seed_deme;
+
   // Internal functions
   void InitConfigs(DOLWorldConfig & config);
   void InitPop(DOLWorldConfig & config);
@@ -183,6 +222,7 @@ public:
     if (setup) {
       inst_lib.Delete();
       event_lib.Delete();
+      on_death_sig.Clear(); // Weird design pattern issue => on death triggers stuff in the derived class, but derived class is deleted by the time base class destructor is run!
     }
   }
 
@@ -287,6 +327,7 @@ void DOLWorld::Deme::SetCellHardwareStochasticTieBreaks(bool val) {
   }
 }
 
+/// Given a Facing direction, return a representative string (useful for debugging)
 std::string DOLWorld::Deme::FacingStr(Facing dir) const {
   switch (dir) {
     case Facing::N: return "N";
@@ -303,6 +344,7 @@ std::string DOLWorld::Deme::FacingStr(Facing dir) const {
   }
 }
 
+/// Print the deme's neighbor map! (useful for debugging)
 void DOLWorld::Deme::PrintNeighborMap(std::ostream & os /*= std::cout*/) const {
   const size_t num_cells = width * height;
   for (size_t i = 0; i < num_cells; ++i) {
@@ -340,6 +382,10 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   MAX_FUNCTION_LEN = config.MAX_FUNCTION_LEN();
   MIN_ARGUMENT_VAL = config.MIN_ARGUMENT_VAL();
   MAX_ARGUMENT_VAL = config.MAX_ARGUMENT_VAL();
+
+  // Verify some requirements
+  emp_assert(MIN_FUNCTION_CNT > 0);
+  emp_assert(MIN_FUNCTION_LEN > 0);
 }
 
 /// Initialize the population
@@ -400,7 +446,39 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   InitConfigs(config);
 
   // todo - setup setup signalgp instruction/event libraries
+
+  // Setup deme hardware
   SetupDemeHardware();
+
+  // Note, this is the function I would modify/parameterize if we wanted
+  // to have single birth => multiple cells activated on placement
+  fun_seed_deme = [this](Deme & deme, org_t & org) {
+    // (1) select a random cell in the deme
+    const size_t cell_id = GetRandom().GetUInt(deme.GetCellCapacity());
+    CellularHardware & cell_hw = deme.GetCell(cell_id);
+    // (2) activate focal cell
+    cell_hw.ActivateCell(org.GetGenome().program, org.GetGenome().birth_tag, sgp_memory_t(), true);
+  };
+
+  SetPopStruct_Mixed(false);  // Mixed population (at deme/organism-level), asynchronous generations
+
+  // What to do when an organism dies?
+  // - deactivate the deme hardware
+  OnOrgDeath([this](size_t pos) {
+    // Clean up deme hardware @ position
+    demes[pos].DeactivateDeme();
+  });
+
+  // What happens when a new organism is placed?
+  OnPlacement([this](size_t pos) {
+    // Load organism into deme hardware
+    Deme & focal_deme = demes[pos];
+    org_t & placed_org = GetOrg(pos);
+    placed_org.SetOrgID(pos);
+    fun_seed_deme(focal_deme, placed_org);
+    focal_deme.ActivateDeme();
+  });
+  // todo - when do mutations happen? automatically?
 
   // todo - setup environment
   // todo - setup systematics
@@ -412,7 +490,6 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   InitPop(config);
 
   // todo - configure world appropriately (e.g., asynchronous, mixed)
-
   setup = true;
   emp_assert(pop.size() == demes.size(), "SETUP ERROR! Population vector size (", pop.size(), ")", "does not match deme vector size (", demes.size(), ").");
 }
