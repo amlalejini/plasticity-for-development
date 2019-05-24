@@ -72,6 +72,10 @@ public:
       sgp_hw.SpawnCore(init_tag, sgp_hw.GetMinBindThresh(), init_mem, init_main);
       active = true;
     }
+
+    void AdvanceStep() {
+      sgp_hw.SingleProcess();
+    }
   };
 
   /// A 'deme' of CellularHardware.
@@ -87,8 +91,10 @@ public:
     bool deme_active = false;            ///< Is this deme actively running?
     size_t width;                        ///< Width of grid
     size_t height;                       ///< Height of grid
+    emp::Ptr<emp::Random> random_ptr;
     emp::vector<size_t> neighbor_lookup; ///< Lookup table for neighbors
     emp::vector<CellularHardware> cells; ///< Toroidal grid of CellularHardware units
+    emp::vector<size_t> cell_schedule;   ///< Order to execute cells
 
     /// Build neighbor lookup (according to current width and height)
     void BuildNeighborLookup();
@@ -99,11 +105,12 @@ public:
   public:
     Deme(size_t _width, size_t _height, emp::Ptr<emp::Random> _rnd,
         emp::Ptr<inst_lib_t> _inst_lib, emp::Ptr<event_lib_t> _event_lib)
-      : width(_width), height(_height)
+      : width(_width), height(_height), random_ptr(_rnd)
     {
       for (size_t i = 0; i < width*height; ++i) {
         cells.emplace_back(_rnd, _inst_lib, _event_lib);
         cells.back().cell_id = i; // Cell id corresponds to position in cells vector
+        cell_schedule.emplace_back(i);
       }
       BuildNeighborLookup();
     }
@@ -164,6 +171,25 @@ public:
       deme_active = false;
     }
 
+    void Advance(size_t steps) {
+      for (size_t i = 0; i < steps; ++i) {
+        SingleAdvance();
+      }
+    }
+
+    void SingleAdvance() {
+      // Advance cells in random order
+      emp::Shuffle(*random_ptr, cell_schedule);
+      for (size_t id : cell_schedule) {
+        if (!cells[id].active) {
+          continue;
+        }
+        CellularHardware & cell = cells[id];
+        cell.AdvanceStep(); // Advance cell by one step
+        // todo - if no threads and no sensors => mark as deactivated!
+      }
+    }
+
     /// Return a string representation of the given facing direction (useful for debugging)
     std::string FacingStr(Facing dir) const;
 
@@ -212,6 +238,7 @@ protected:
   void InitPop_Load(DOLWorldConfig & config);
 
   void SetupDemeHardware();
+  void SetupInstructionSet();
 
 public:
 
@@ -434,6 +461,41 @@ void DOLWorld::SetupDemeHardware() {
   }
 }
 
+/// Setup the signalgp instruction set
+void DOLWorld::SetupInstructionSet() {
+  // Default instructions
+  inst_lib->AddInst("Inc", sgp_hardware_t::Inst_Inc, 1, "Increment value in local memory Arg1");
+  inst_lib->AddInst("Dec", sgp_hardware_t::Inst_Dec, 1, "Decrement value in local memory Arg1");
+  inst_lib->AddInst("Not", sgp_hardware_t::Inst_Not, 1, "Logically toggle value in local memory Arg1");
+  inst_lib->AddInst("Add", sgp_hardware_t::Inst_Add, 3, "Local memory: Arg3 = Arg1 + Arg2");
+  inst_lib->AddInst("Sub", sgp_hardware_t::Inst_Sub, 3, "Local memory: Arg3 = Arg1 - Arg2");
+  inst_lib->AddInst("Mult", sgp_hardware_t::Inst_Mult, 3, "Local memory: Arg3 = Arg1 * Arg2");
+  inst_lib->AddInst("Div", sgp_hardware_t::Inst_Div, 3, "Local memory: Arg3 = Arg1 / Arg2");
+  inst_lib->AddInst("Mod", sgp_hardware_t::Inst_Mod, 3, "Local memory: Arg3 = Arg1 % Arg2");
+  inst_lib->AddInst("TestEqu", sgp_hardware_t::Inst_TestEqu, 3, "Local memory: Arg3 = (Arg1 == Arg2)");
+  inst_lib->AddInst("TestNEqu", sgp_hardware_t::Inst_TestNEqu, 3, "Local memory: Arg3 = (Arg1 != Arg2)");
+  inst_lib->AddInst("TestLess", sgp_hardware_t::Inst_TestLess, 3, "Local memory: Arg3 = (Arg1 < Arg2)");
+  inst_lib->AddInst("If", sgp_hardware_t::Inst_If, 1, "Local memory: If Arg1 != 0, proceed; else, skip block.", emp::ScopeType::BASIC, 0, {"block_def"});
+  inst_lib->AddInst("While", sgp_hardware_t::Inst_While, 1, "Local memory: If Arg1 != 0, loop; else, skip block.", emp::ScopeType::BASIC, 0, {"block_def"});
+  inst_lib->AddInst("Countdown", sgp_hardware_t::Inst_Countdown, 1, "Local memory: Countdown Arg1 to zero.", emp::ScopeType::BASIC, 0, {"block_def"});
+  inst_lib->AddInst("Close", sgp_hardware_t::Inst_Close, 0, "Close current block if there is a block to close.", emp::ScopeType::BASIC, 0, {"block_close"});
+  inst_lib->AddInst("Break", sgp_hardware_t::Inst_Break, 0, "Break out of current block.");
+  inst_lib->AddInst("Call", sgp_hardware_t::Inst_Call, 0, "Call function that best matches call affinity.", emp::ScopeType::BASIC, 0, {"affinity"});
+  inst_lib->AddInst("Return", sgp_hardware_t::Inst_Return, 0, "Return from current function if possible.");
+  inst_lib->AddInst("SetMem", sgp_hardware_t::Inst_SetMem, 2, "Local memory: Arg1 = numerical value of Arg2");
+  inst_lib->AddInst("CopyMem", sgp_hardware_t::Inst_CopyMem, 2, "Local memory: Arg1 = Arg2");
+  inst_lib->AddInst("SwapMem", sgp_hardware_t::Inst_SwapMem, 2, "Local memory: Swap values of Arg1 and Arg2.");
+  inst_lib->AddInst("Input", sgp_hardware_t::Inst_Input, 2, "Input memory Arg1 => Local memory Arg2.");
+  inst_lib->AddInst("Output", sgp_hardware_t::Inst_Output, 2, "Local memory Arg1 => Output memory Arg2.");
+  inst_lib->AddInst("Commit", sgp_hardware_t::Inst_Commit, 2, "Local memory Arg1 => Shared memory Arg2.");
+  inst_lib->AddInst("Pull", sgp_hardware_t::Inst_Pull, 2, "Shared memory Arg1 => Shared memory Arg2.");
+  inst_lib->AddInst("Nop", sgp_hardware_t::Inst_Nop, 0, "No operation.");
+  // inst_lib->AddInst("Fork", Inst_Fork, 0, "Fork a new thread. Local memory contents of callee are loaded into forked thread's input memory.");
+  inst_lib->AddInst("Terminate", sgp_hardware_t::Inst_Terminate, 0, "Kill current thread.");
+  // Task-specific instructions
+  // ...
+}
+
 /// Setup the experiment.
 void DOLWorld::Setup(DOLWorldConfig & config) {
   std::cout << "DOLWorld - Setup" << std::endl;
@@ -444,11 +506,17 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   }
 
   InitConfigs(config);
+  inst_lib = emp::NewPtr<inst_lib_t>();
+  event_lib = emp::NewPtr<event_lib_t>();
 
   // todo - setup setup signalgp instruction/event libraries
+  SetupInstructionSet();
 
   // Setup deme hardware
   SetupDemeHardware();
+
+  SetPopStruct_Mixed(false);  // Mixed population (at deme/organism-level), asynchronous generations
+  SetAutoMutate(); // Mutations happen automatically when organisms are born (offspring_ready_sig)
 
   // Note, this is the function I would modify/parameterize if we wanted
   // to have single birth => multiple cells activated on placement
@@ -459,8 +527,6 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     // (2) activate focal cell
     cell_hw.ActivateCell(org.GetGenome().program, org.GetGenome().birth_tag, sgp_memory_t(), true);
   };
-
-  SetPopStruct_Mixed(false);  // Mixed population (at deme/organism-level), asynchronous generations
 
   // What to do when an organism dies?
   // - deactivate the deme hardware
@@ -478,20 +544,41 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     fun_seed_deme(focal_deme, placed_org);
     focal_deme.ActivateDeme();
   });
-  // todo - when do mutations happen? automatically?
 
   // todo - setup environment
   // todo - setup systematics
 
   // todo - finish function
-  inst_lib = emp::NewPtr<inst_lib_t>();
-  inst_lib->AddInst("Inc", sgp_hardware_t::Inst_Inc, 1, "Increment value in local memory Arg1");
-  event_lib = emp::NewPtr<event_lib_t>();
+
   InitPop(config);
 
   // todo - configure world appropriately (e.g., asynchronous, mixed)
   setup = true;
   emp_assert(pop.size() == demes.size(), "SETUP ERROR! Population vector size (", pop.size(), ")", "does not match deme vector size (", demes.size(), ").");
+}
+
+void DOLWorld::RunStep() {
+  std::cout << "Update: " << update << std::endl;
+  // What is an update?
+  // - CPU_CYCLES_PER_UPDATE distributed to every CPU thread across all demes
+  // For each organism (active deme):
+  for (size_t oid = 0; oid < pop.size(); ++oid) {
+    if (!IsOccupied(oid)) continue;
+    // Distribute CPU cycles to DEME
+    Deme & deme = demes[oid];
+    deme.Advance(CPU_CYCLES_PER_UPDATE);
+  }
+  // - Is there anything we need to care about?
+  //   - e.g., add to birth chamber? => reminder: don't want to accidentally replicate new-born
+  // For each organism in the population, run its deme forward!
+  Update(); // Update!
+}
+
+void DOLWorld::Run() {
+  for (size_t u = 0 ; u <= UPDATES; ++u) {
+    RunStep();
+  }
+  // Todo - end of run snapshotting/analyses!
 }
 
 #endif

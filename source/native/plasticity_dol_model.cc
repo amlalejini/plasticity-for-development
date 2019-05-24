@@ -29,4 +29,5 @@ int main(int argc, char* argv[])
   DOLWorld world(rnd);
 
   world.Setup(config);
+  world.Run();
 }

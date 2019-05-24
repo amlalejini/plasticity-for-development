@@ -36,6 +36,7 @@ public:
   };
 
   struct Phenotype {
+    double resources_collected=0.0;
 
   };
 
