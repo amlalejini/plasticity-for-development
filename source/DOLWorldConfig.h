@@ -4,6 +4,10 @@
 
 #include "config/config.h"
 
+namespace DOLWorldConstants {
+  constexpr size_t TAG_WIDTH = 16;
+}
+
 // DOLWorld Configuration
 EMP_BUILD_CONFIG( DOLWorldConfig,
   GROUP(MAIN, "Global Settings"),
@@ -30,6 +34,17 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(MAX_FUNCTION_LEN, size_t, 256, "Maximum number of instructions allowed in a SignalGP program function."),
   VALUE(MIN_ARGUMENT_VAL, int, 0, "Minimum value for SignalGP instruction arguments."),
   VALUE(MAX_ARGUMENT_VAL, int, 15, "Maximum value for SignalGP instruction arguments."),
+
+  GROUP(MUTATION, "DigitalOrganism Mutation Settings"),
+  VALUE(PROGRAM_ARG_SUB__PER_ARG, double, 0.0025, "Program argument substitution rate (per-argument)"),
+  VALUE(PROGRAM_INST_SUB__PER_INST, double, 0.005, "Program instruction substitution rate (per-instruction)"),
+  VALUE(PROGRAM_INST_INS__PER_INST, double, 0.005, "Program instruction insertion rate (per-instruction)"),
+  VALUE(PROGRAM_INST_DEL__PER_INST, double, 0.005, "Program instruction deletion rate (per-instruction)"),
+  VALUE(PROGRAM_SLIP__PER_FUN, double, 0.05, "Program slip-mutation rate (per-function)"),
+  VALUE(PROGRAM_FUNC_DUP__PER_FUN, double, 0.05, "Program whole-function duplication rate (per-function)"),
+  VALUE(PROGRAM_FUNC_DEL__PER_FUN, double, 0.05, "Program whole-function deletion rate (per-function)"),
+  VALUE(PROGRAM_TAG_BIT_FLIP__PER_BIT, double, 0.0025, "Program tags bit flip rate (per-bit)"),
+  VALUE(BIRTH_TAG_BIT_FLIP__PER_BIT, double, 0.0025, "Birth tag bit flip rate (per-bit)"),
 
 )
 

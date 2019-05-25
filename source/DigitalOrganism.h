@@ -15,12 +15,11 @@
 
 #include "DOLWorldConfig.h"
 
-template<size_t TAG_WIDTH>
 class DigitalOrganism {
 public:
   struct Genome;
   struct Phenotype;
-  using sgp_hardware_t = typename emp::EventDrivenGP_AW<TAG_WIDTH>;
+  using sgp_hardware_t = typename emp::EventDrivenGP_AW<DOLWorldConstants::TAG_WIDTH>;
   using program_t = typename sgp_hardware_t::Program;
   using tag_t = typename sgp_hardware_t::affinity_t;   // Actual type: BitSet<TAG_WIDTH>
 
@@ -36,8 +35,9 @@ public:
   };
 
   struct Phenotype {
-    double resources_collected=0.0;
-
+    bool trigger_repro=false;         ///< Trigger reproduction?
+    double resources_collected=0.0;   ///< How many resources has this organism collected?
+    size_t age=0;                     ///< How many updates has this organism been alive?
   };
 
 protected:
@@ -70,19 +70,17 @@ public:
 
 // Generate and return a digital organism with a random genome.
 // - Makes use of signalgp_utils.h's generate random program & random tag functions.
-template<size_t W>
-typename DigitalOrganism<W>::Genome GenRandDigitalOrganismGenome(
+typename DigitalOrganism::Genome GenRandDigitalOrganismGenome(
     emp::Random & rnd,
-    const emp::InstLib<emp::EventDrivenGP_AW<W>> & inst_lib,
+    const emp::InstLib<emp::EventDrivenGP_AW<DOLWorldConstants::TAG_WIDTH>> & inst_lib,
     const DOLWorldConfig & config)
 {
-  return {emp::GenRandSignalGPProgram<W>(rnd, inst_lib, config.MIN_FUNCTION_CNT(),
-                                                        config.MAX_FUNCTION_CNT(),
-                                                        config.MIN_FUNCTION_LEN(),
-                                                        config.MAX_FUNCTION_LEN(),
-                                                        config.MIN_ARGUMENT_VAL(),
-                                                        config.MAX_ARGUMENT_VAL()),
-          emp::GenRandSignalGPTag<W>(rnd)};
+  return {emp::GenRandSignalGPProgram<DOLWorldConstants::TAG_WIDTH>(
+                rnd, inst_lib,
+                config.MIN_FUNCTION_CNT(), config.MAX_FUNCTION_CNT(),
+                config.MIN_FUNCTION_LEN(), config.MAX_FUNCTION_LEN(),
+                config.MIN_ARGUMENT_VAL(), config.MAX_ARGUMENT_VAL()),
+          emp::GenRandSignalGPTag<DOLWorldConstants::TAG_WIDTH>(rnd)};
 }
 
 #endif

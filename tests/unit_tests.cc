@@ -8,11 +8,10 @@
 
 /// Given a DOLWorldConfig and a DigitalOrganism genome, validate genome against
 /// configuration settings.
-template<size_t W>
 bool ValidateDigitalOrganismGenome(const DOLWorldConfig & config,
-                                   const typename DigitalOrganism<W>::Genome & genome) {
-  using hardware_t = typename DigitalOrganism<W>::sgp_hardware_t;
-  using program_t = typename DigitalOrganism<W>::program_t;
+                                   const typename DigitalOrganism::Genome & genome) {
+  using hardware_t = typename DigitalOrganism::sgp_hardware_t;
+  using program_t = typename DigitalOrganism::program_t;
   const program_t & prog = genome.program;
   // Validate program.
   const size_t max_total_len = config.MAX_FUNCTION_CNT() * config.MAX_FUNCTION_LEN();
@@ -140,7 +139,7 @@ TEST_CASE ( "DOLWorld Setup - Random Population Initialization", "[world][setup]
   // Verify genomes in the population.
   for (size_t i = 0; i < world.GetSize(); ++i) {
     if (!world.IsOccupied(i)) continue;
-    REQUIRE(ValidateDigitalOrganismGenome<DOLWorld::TAG_WIDTH>(config, world.GetGenomeAt(i)));
+    REQUIRE(ValidateDigitalOrganismGenome(config, world.GetGenomeAt(i)));
   }
 
   config.INIT_POP_SIZE(200);
@@ -155,7 +154,7 @@ TEST_CASE ( "DOLWorld Setup - Random Population Initialization", "[world][setup]
   // Verify genomes in the population.
   for (size_t i = 0; i < world2.GetSize(); ++i) {
     if (!world2.IsOccupied(i)) continue;
-    REQUIRE(ValidateDigitalOrganismGenome<DOLWorld::TAG_WIDTH>(config, world2.GetGenomeAt(i)));
+    REQUIRE(ValidateDigitalOrganismGenome(config, world2.GetGenomeAt(i)));
   }
 }
 
@@ -199,4 +198,17 @@ TEST_CASE ( "DOLWorld Setup - Deme Hardware Setup", "[world][setup][deme]" ) {
     }
   }
   REQUIRE(active_cell_cnt == config.INIT_POP_SIZE());
+}
+
+TEST_CASE ( "DOLWorld Run - Default Settings", "[world][run]" ) {
+  // Create a configuration object
+  DOLWorldConfig config;
+  config.SEED(1);
+  // Create a new DOLWorld
+  emp::Random rnd(config.SEED());
+  DOLWorld world(rnd);
+  world.Setup(config);
+  // Run world under default configuration options
+  world.Run();
+  REQUIRE(world.GetUpdate() == config.UPDATES()+1);
 }

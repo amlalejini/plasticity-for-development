@@ -19,22 +19,22 @@
 #include "base/vector.h"
 #include "config/ArgManager.h"
 #include "Evolve/World.h"
+#include "hardware/EventDrivenGP.h"
+#include "hardware/signalgp_utils.h"
 #include "tools/math.h"
 
 // Local includes
-#include "DigitalOrganism.h"
 #include "DOLWorldConfig.h"
+#include "DigitalOrganism.h"
 
-class DOLWorld : public emp::World<DigitalOrganism<16>> {
+class DOLWorld : public emp::World<DigitalOrganism> {
 public:
-  // static constants
-  static constexpr size_t TAG_WIDTH = 16;
   // Forward declarations
   struct CellularHardware;
   class Deme;
   // public aliases
-  using org_t = DigitalOrganism<TAG_WIDTH>;
-  using sgp_hardware_t = emp::EventDrivenGP_AW<TAG_WIDTH>;
+  using org_t = DigitalOrganism;
+  using sgp_hardware_t = emp::EventDrivenGP_AW<DOLWorldConstants::TAG_WIDTH>;
   using sgp_program_t = typename sgp_hardware_t::Program;
   using sgp_memory_t = typename sgp_hardware_t::memory_t;
   using tag_t = typename sgp_hardware_t::affinity_t;
@@ -220,6 +220,16 @@ protected:
   size_t MAX_FUNCTION_LEN;
   int MIN_ARGUMENT_VAL;
   int MAX_ARGUMENT_VAL;
+  // MUTATION Configuration Settings
+  double PROGRAM_ARG_SUB__PER_ARG;
+  double PROGRAM_INST_SUB__PER_INST;
+  double PROGRAM_INST_INS__PER_INST;
+  double PROGRAM_INST_DEL__PER_INST;
+  double PROGRAM_SLIP__PER_FUN;
+  double PROGRAM_FUNC_DUP__PER_FUN;
+  double PROGRAM_FUNC_DEL__PER_FUN;
+  double PROGRAM_TAG_BIT_FLIP__PER_BIT;
+  double BIRTH_TAG_BIT_FLIP__PER_BIT;
 
   // Non-configuration member variables
   bool setup = false;
@@ -228,6 +238,7 @@ protected:
   emp::Ptr<event_lib_t> event_lib;
 
   emp::vector<Deme> demes;
+  emp::vector<size_t> birth_chamber; ///< IDs of organisms ready to reproduce!
 
   deme_seed_fun_t fun_seed_deme;
 
@@ -409,6 +420,16 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   MAX_FUNCTION_LEN = config.MAX_FUNCTION_LEN();
   MIN_ARGUMENT_VAL = config.MIN_ARGUMENT_VAL();
   MAX_ARGUMENT_VAL = config.MAX_ARGUMENT_VAL();
+  // MUTATION Configuration Settings
+  PROGRAM_ARG_SUB__PER_ARG = config.PROGRAM_ARG_SUB__PER_ARG();
+  PROGRAM_INST_SUB__PER_INST = config.PROGRAM_INST_SUB__PER_INST();
+  PROGRAM_INST_INS__PER_INST = config.PROGRAM_INST_INS__PER_INST();
+  PROGRAM_INST_DEL__PER_INST = config.PROGRAM_INST_DEL__PER_INST();
+  PROGRAM_SLIP__PER_FUN = config.PROGRAM_SLIP__PER_FUN();
+  PROGRAM_FUNC_DUP__PER_FUN = config.PROGRAM_FUNC_DUP__PER_FUN();
+  PROGRAM_FUNC_DEL__PER_FUN = config.PROGRAM_FUNC_DEL__PER_FUN();
+  PROGRAM_TAG_BIT_FLIP__PER_BIT = config.PROGRAM_TAG_BIT_FLIP__PER_BIT();
+  BIRTH_TAG_BIT_FLIP__PER_BIT = config.BIRTH_TAG_BIT_FLIP__PER_BIT();
 
   // Verify some requirements
   emp_assert(MIN_FUNCTION_CNT > 0);
@@ -435,7 +456,7 @@ void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
   //   we're just going to fill things up from beginning to end.
   emp_assert(INIT_POP_SIZE <= MAX_POP_SIZE, "INIT_POP_SIZE (", INIT_POP_SIZE, ") cannot exceed MAX_POP_SIZE (", MAX_POP_SIZE, ")!");
   for (size_t i = 0; i < INIT_POP_SIZE; ++i) {
-    InjectAt(GenRandDigitalOrganismGenome<TAG_WIDTH>(*random_ptr, *inst_lib, config), i);
+    InjectAt(GenRandDigitalOrganismGenome(*random_ptr, *inst_lib, config), i);
   }
   // WARNING: All initial organisms in the population will have independent ancestry.
   //          - We could do a little extra work to tie their ancestry together (e.g.,
@@ -558,18 +579,41 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
 }
 
 void DOLWorld::RunStep() {
-  std::cout << "Update: " << update << std::endl;
-  // What is an update?
-  // - CPU_CYCLES_PER_UPDATE distributed to every CPU thread across all demes
-  // For each organism (active deme):
+  std::cout << "Update: " << update << "; NumOrgs: " << GetNumOrgs() << std::endl;
+  // Reminder, 1 update = CPU_CYCLES_PER_UPDATE distributed to every CPU thread across all demes
+  // (1) Evaluate all organisms (demes)
+  std::cout << "EXECUTION" << std::endl;
   for (size_t oid = 0; oid < pop.size(); ++oid) {
     if (!IsOccupied(oid)) continue;
     // Distribute CPU cycles to DEME
     Deme & deme = demes[oid];
     deme.Advance(CPU_CYCLES_PER_UPDATE);
+    // Did organism trigger reproduction?
+    org_t & org = GetOrg(oid);
+    // Age organism
+    org.GetPhenotype().age++;
+    // if (org.GetPhenotype().age % 100 == 0) org.GetPhenotype().trigger_repro = true;
+    if (org.GetPhenotype().trigger_repro) {
+      birth_chamber.emplace_back(oid);
+    }
   }
-  // - Is there anything we need to care about?
-  //   - e.g., add to birth chamber? => reminder: don't want to accidentally replicate new-born
+  // (2) Do reproduction
+  emp::Shuffle(*random_ptr, birth_chamber); // Randomize birth chamber priority
+  std::cout << "REPRODUCTION?" << std::endl;
+  for (size_t oid : birth_chamber) {
+    emp_assert(IsOccupied(oid), "Reproducing organism no longer exists?");
+    // We have to check if this organism is _still_ reproducing?
+    // - In the unfortunate case where this potential parent was overwritten by
+    //   a new baby organism, we don't want to replicate the new organism.
+    org_t & org = GetOrg(oid);
+    if (org.GetPhenotype().trigger_repro) {
+      // Birth!
+      std::cout << "Org " << oid << " giving birth!" << std::endl;
+      DoBirth(org.GetGenome(), oid);
+    }
+  }
+  // Empty the birth chamber
+  birth_chamber.clear();
   // For each organism in the population, run its deme forward!
   Update(); // Update!
 }
