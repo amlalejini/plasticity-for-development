@@ -26,6 +26,7 @@
 // Local includes
 #include "DOLWorldConfig.h"
 #include "DigitalOrganism.h"
+#include "Mutator.h"
 
 class DOLWorld : public emp::World<DigitalOrganism> {
 public:
@@ -236,6 +237,8 @@ protected:
 
   emp::Ptr<inst_lib_t> inst_lib;
   emp::Ptr<event_lib_t> event_lib;
+
+  Mutator mutator;
 
   emp::vector<Deme> demes;
   emp::vector<size_t> birth_chamber; ///< IDs of organisms ready to reproduce!
@@ -482,7 +485,7 @@ void DOLWorld::SetupDemeHardware() {
   }
 }
 
-/// Setup the signalgp instruction set
+/// Setup the signalgp instruction set - todo (finish)!
 void DOLWorld::SetupInstructionSet() {
   // Default instructions
   inst_lib->AddInst("Inc", sgp_hardware_t::Inst_Inc, 1, "Increment value in local memory Arg1");
@@ -527,6 +530,8 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   }
 
   InitConfigs(config);
+  mutator.Setup(config); // Configure the mutator
+
   inst_lib = emp::NewPtr<inst_lib_t>();
   event_lib = emp::NewPtr<event_lib_t>();
 
@@ -564,6 +569,11 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     placed_org.SetOrgID(pos);
     fun_seed_deme(focal_deme, placed_org);
     focal_deme.ActivateDeme();
+  });
+
+  // Setup mutate function
+  SetMutFun([this](org_t & org, emp::Random & r) {
+    return mutator.Mutate(org, r);
   });
 
   // todo - setup environment

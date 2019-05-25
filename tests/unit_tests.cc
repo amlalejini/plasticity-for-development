@@ -212,3 +212,7 @@ TEST_CASE ( "DOLWorld Run - Default Settings", "[world][run]" ) {
   world.Run();
   REQUIRE(world.GetUpdate() == config.UPDATES()+1);
 }
+
+TEST_CASE ( "Mutator", "[mutator]") {
+  // todo!
+}
