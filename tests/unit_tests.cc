@@ -2,6 +2,7 @@
 #include "catch.hpp"
 
 #include "TestStruct.h"
+#include "Deme.h"
 #include "DOLWorld.h"
 #include "DOLWorldConfig.h"
 #include "DigitalOrganism.h"
@@ -61,9 +62,9 @@ TEST_CASE( "DOLWorld Setup - Configuration Initialization", "[world][setup]" ) {
 }
 
 TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
-  using facing_t = DOLWorld::Deme::Facing;
+  using facing_t = Deme::Facing;
 
-  DOLWorld::Deme deme1x1(1, 1, nullptr, nullptr, nullptr);
+  Deme deme1x1(1, 1, nullptr, nullptr, nullptr);
   deme1x1.PrintNeighborMap();
   REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::N) == 0);
   REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::NE) == 0);
@@ -74,7 +75,7 @@ TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
   REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::W) == 0);
   REQUIRE(deme1x1.GetNeighboringCellID(0, facing_t::NW) == 0);
 
-  DOLWorld::Deme deme2x2(2, 2, nullptr, nullptr, nullptr);
+  Deme deme2x2(2, 2, nullptr, nullptr, nullptr);
   // Check cell 0's neighbors
   REQUIRE(deme2x2.GetNeighboringCellID(0, facing_t::N) == 2);
   REQUIRE(deme2x2.GetNeighboringCellID(0, facing_t::NE) == 3);
@@ -94,7 +95,7 @@ TEST_CASE ( "DOLWorld Deme - Topology", "[world][deme]" ) {
   REQUIRE(deme2x2.GetNeighboringCellID(3, facing_t::W) == 2);
   REQUIRE(deme2x2.GetNeighboringCellID(3, facing_t::NW) == 0);
 
-  DOLWorld::Deme deme4x4(4, 4, nullptr, nullptr, nullptr);
+  Deme deme4x4(4, 4, nullptr, nullptr, nullptr);
   // Pretty print the neighbor map
   // deme4x4.PrintNeighborMap();
   REQUIRE(deme4x4.GetNeighboringCellID(5, facing_t::N) == 9);
@@ -159,8 +160,8 @@ TEST_CASE ( "DOLWorld Setup - Random Population Initialization", "[world][setup]
 }
 
 TEST_CASE ( "DOLWorld Setup - Deme Hardware Setup", "[world][setup][deme]" ) {
-  using deme_t = DOLWorld::Deme;
-  using cell_hw_t = DOLWorld::CellularHardware;
+  using deme_t = Deme;
+  using cell_hw_t = Deme::CellularHardware;
   // Create a configuration object
   DOLWorldConfig config;
   config.SEED(1);
