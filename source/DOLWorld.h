@@ -42,6 +42,46 @@ public:
 
   using deme_seed_fun_t = std::function<void(Deme&, org_t&)>;
 
+  enum class ResourceType { STATIC, PERIODIC };
+
+  struct Resource {
+    size_t resource_id=(size_t)-1; ///< Resource identifier
+    ResourceType type=ResourceType::STATIC;
+    double amount=0;               ///< How much resource is available?
+    bool available=false;          ///< Is the resource available?
+    size_t updates_available=0;    ///< Accumulator; how many updates has this resource been 'available'?
+
+    void Reset() {
+      amount = 0;
+      available = false;
+      updates_available = 0;
+    }
+
+    /// Attempt to consume an amount of this resource
+    double Consume(double value) {
+      return 0.0;
+    }
+
+    /// Attempt to consume a fixed proportion
+    double ConsumeProportion(double prop) {
+      return 0.0;
+    }
+
+    void DecayAmount(double value);
+
+    void DecayProportion(double prop);
+
+    void SetAmount(double value) { emp_assert(value >= 0); amount = value; }
+    void IncAmount(double value) { emp_assert(amount + value >= 0); amount += value; }
+
+  };
+
+  /// Each deme has a local environment
+  struct Environment {
+    size_t env_id;                    ///< Corresponds to associated deme_id (& org id)
+    std::vector<Resource> resources;
+  };
+
 protected:
 
   // MAIN Configuration Settings
@@ -51,6 +91,9 @@ protected:
   size_t INIT_POP_SIZE;
   size_t MAX_POP_SIZE;
   std::string INIT_POP_MODE;
+  // RESOURCES Configuration Settings
+  size_t NUM_PERIODIC_RESOURCES;
+  size_t NUM_STATIC_RESOURCES;
   // DEME Configuration Settings
   size_t DEME_WIDTH;
   size_t DEME_HEIGHT;
@@ -84,6 +127,8 @@ protected:
 
   Mutator mutator;
 
+  emp::vector<Environment> environments;  ///< Each organism (and deme) is has a local environment
+
   emp::vector<Deme> demes;
   emp::vector<size_t> birth_chamber; ///< IDs of organisms ready to reproduce!
 
@@ -97,6 +142,7 @@ protected:
 
   void SetupDemeHardware();
   void SetupInstructionSet();
+  void SetupEnvironment();
 
 public:
 
@@ -143,6 +189,9 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   INIT_POP_SIZE = config.INIT_POP_SIZE();
   MAX_POP_SIZE = config.MAX_POP_SIZE();
   INIT_POP_MODE = config.INIT_POP_MODE();
+  // RESOURCES Configuration Settings
+  NUM_PERIODIC_RESOURCES = config.NUM_PERIODIC_RESOURCES();
+  NUM_STATIC_RESOURCES = config.NUM_STATIC_RESOURCES();
   // DEME Configuration Settings
   DEME_WIDTH = config.DEME_WIDTH();
   DEME_HEIGHT = config.DEME_HEIGHT();
@@ -250,8 +299,43 @@ void DOLWorld::SetupInstructionSet() {
   inst_lib->AddInst("Nop", sgp_hardware_t::Inst_Nop, 0, "No operation.");
   // inst_lib->AddInst("Fork", Inst_Fork, 0, "Fork a new thread. Local memory contents of callee are loaded into forked thread's input memory.");
   inst_lib->AddInst("Terminate", sgp_hardware_t::Inst_Terminate, 0, "Kill current thread.");
-  // Task-specific instructions
-  // ...
+
+  // todo - deme instructions (send-msg, broadcast-msg, etc)
+  // todo - odometry (facing)
+  // todo - 'movement' (rot-cw-45, rot-ccw-45, rot-90, rot-180, rot-nxt-neighbor)
+  // todo - reproduction (???)
+}
+
+/// Setup the environment (might add instructions to the instruction set!)
+void DOLWorld::SetupEnvironment() {
+  // Each position in the population has its own local environment
+  environments.resize(MAX_POP_SIZE);
+  for (size_t env_id = 0; env_id < environments.size(); ++env_id) {
+    // std::cout << "Configuring env " << env_id << std::endl;
+    Environment & env = environments[env_id]; // Configure environment @ env_id
+    env.env_id = env_id;
+    env.resources.resize(NUM_STATIC_RESOURCES + NUM_PERIODIC_RESOURCES);
+    size_t taskID = 0; // Each resource is associated with a 'task'
+    // How many static resources?
+    while (taskID < NUM_STATIC_RESOURCES) {
+      // std::cout << "Configuring resource " << taskID << " (STATIC)" << std::endl;
+      env.resources[taskID].resource_id = taskID;
+      env.resources[taskID].type = ResourceType::STATIC;
+      env.resources[taskID].Reset();
+      ++taskID;
+    }
+    // How many periodic resources?
+    while (taskID < NUM_STATIC_RESOURCES + NUM_PERIODIC_RESOURCES) {
+      std::cout << "Configuring resource " << taskID << " (PERIODIC)" << std::endl;
+      env.resources[taskID].resource_id = taskID;
+      env.resources[taskID].type = ResourceType::PERIODIC;
+      env.resources[taskID].Reset();
+      ++taskID;
+    }
+  }
+  std::cout << "Configured " << environments.size() << " environments, each with " << environments.back().resources.size() << " resources." << std::endl;
+
+  // Add instructions to instruction set
 }
 
 /// Setup the experiment.
@@ -274,6 +358,8 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
 
   // Setup deme hardware
   SetupDemeHardware();
+  // Setup the environment
+  SetupEnvironment();
 
   SetPopStruct_Mixed(false);  // Mixed population (at deme/organism-level), asynchronous generations
   SetAutoMutate(); // Mutations happen automatically when organisms are born (offspring_ready_sig)

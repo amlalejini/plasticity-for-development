@@ -43,12 +43,13 @@ public:
     sgp_hardware_t sgp_hw;
     bool active = false;
 
+    // - sensors: emp::vector<size_t> sensors;
+    // - sensor refractory state: emp::vector<size_t> refractory_states;
+    emp::vector<bool> metabolism; ///< Which resources is cell attempting to metabolize?
+
     CellularHardware(emp::Ptr<emp::Random> _rnd, emp::Ptr<inst_lib_t> _inst_lib,
                      emp::Ptr<event_lib_t> _event_lib)
       : sgp_hw(_inst_lib, _event_lib, _rnd) { sgp_hw.ResetHardware(); }
-
-    // - sensors: emp::vector<size_t> sensors;
-    // - sensor refractory state: emp::vector<size_t> refractory_states;
 
     /// On reset:
     /// - reset signalgp hardware & program

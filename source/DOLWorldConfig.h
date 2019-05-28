@@ -18,6 +18,13 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(MAX_POP_SIZE, size_t, 1000, "What is the maximum size of the population?"),
   VALUE(INIT_POP_MODE, std::string, "random", "How should the population be initialized? Options:\n\t'random'"),
 
+  GROUP(RESOURCES, "Resource Settings"),
+  VALUE(NUM_PERIODIC_RESOURCES, size_t, 8, "How many simple tasks should there be?"),
+  VALUE(NUM_STATIC_RESOURCES, size_t, 1, "How many tasks are always rewarded?"),
+  VALUE(STATIC_RESOURCES__LEVEL, double, 25.0, "How much of a static resource is made available every update?"),
+  VALUE(STATIC_RESOURCES__METABOLIZE, double, 25.0, "How much of a static resource is collected when metabolized?"),
+  VALUE(PERIODIC_RESOURCES__LEVEL, double, 100.0, "How much of a "),
+
   GROUP(DEME, "Deme Settings"),
   VALUE(DEME_WIDTH, size_t, 5, "What is the maximum cell-width of a deme?"),
   VALUE(DEME_HEIGHT, size_t, 5, "What is the maximum cell-height of a deme?"),
