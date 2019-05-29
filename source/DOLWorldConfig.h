@@ -27,6 +27,7 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(PERIODIC_RESOURCES__CONSUME_FIXED, double, 25.0, "How much of a periodic resource is collected when metabolized?"),
   VALUE(PERIODIC_RESOURCES__CONSUME_PROPORTIONAL, double, 1.0, "How much of a periodic resource is collected when metabolized?"),
   VALUE(PERIODIC_RESOURCES__FAILURE_COST, double, 0.0, "What is the cost of attempting to consume an unavailable static resource?"),
+  VALUE(PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE, size_t, 1, "How many updates should a resource be unavailable before it is eligible to pulse?"),
 
   VALUE(NUM_STATIC_RESOURCES, size_t, 1, "How many tasks are always rewarded?"),
   VALUE(STATIC_RESOURCES__LEVEL, double, 25.0, "How much of a static resource is made available every update?"),

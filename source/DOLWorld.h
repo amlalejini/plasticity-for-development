@@ -56,11 +56,13 @@ public:
     double amount=0;               ///< How much resource is available?
     bool available=false;          ///< Is the resource available?
     size_t updates_available=0;    ///< Accumulator; how many updates has this resource been 'available'?
+    size_t updates_unavailable=0;
 
     void Reset() {
       amount = 0;
       available = false;
       updates_available = 0;
+      updates_unavailable = 0;
     }
 
     /// Attempt to consume an amount of this resource
@@ -141,6 +143,7 @@ protected:
   double STATIC_RESOURCES__CONSUME_FIXED;
   double STATIC_RESOURCES__CONSUME_PROPORTIONAL;
   double STATIC_RESOURCES__FAILURE_COST;
+  size_t PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE;
   // DEME Configuration Settings
   size_t DEME_WIDTH;
   size_t DEME_HEIGHT;
@@ -196,32 +199,39 @@ protected:
   void SetupEnvironment();
 
   /// Attempt to metabolize resource
-  void AttemptToMetabolize(size_t org_id, size_t cell_id, size_t resource_id) {
-    emp_assert(org_id < GetSize());
-    emp_assert(resource_id < TOTAL_RESOURCES);
-    emp_assert(cell_id < DEME_WIDTH * DEME_HEIGHT);
-    Deme & deme = GetDeme(org_id);
-    Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
-    Environment & local_env = GetEnvironment(org_id);
-    Resource & res_state = local_env.resources[resource_id];
-    // Only allow one attempt per update?
-    if (cell_hw.metabolized_on_advance[resource_id]) return;
-    // Attempt to consume!
-    if (res_state.available) {
-      // Attempt to consume resource
-      fun_consume_resource(org_id, cell_id, resource_id);
-    } else {
-      // Apply cost of attempting to metabolize unavailable resource
-      fun_consume_fail(org_id, cell_id, resource_id);
-    }
-    // Mark that we've attempted to consume!
-    cell_hw.metabolized_on_advance[resource_id] = true;
-  }
+  void AttemptToMetabolize(size_t org_id, size_t cell_id, size_t resource_id);
 
-  void SetCellSensor(size_t org_id, size_t cell_id, size_t resource_id, bool value) {
-    Deme & deme = GetDeme(org_id);
-    Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
-    cell_hw.resource_sensors[resource_id] = value;
+  /// Helper function to set cell sensor
+  void SetCellSensor(size_t org_id, size_t cell_id, size_t resource_id, bool value);
+
+  /// Advance the all environment states
+  void AdvanceEnvironment() {
+    for (size_t env_id = 0; env_id < environments.size(); ++env_id) {
+      Environment & local_env = environments[env_id];
+      // Update resources
+      for (size_t res_id = 0; res_id < local_env.resources.size(); ++res_id) {
+        Resource & res = local_env.resources[res_id];
+        if (res.type == ResourceType::STATIC) {
+          // Replinish resource levels
+          res.available = true;
+          res.amount = STATIC_RESOURCES__LEVEL;
+          res.updates_available = (size_t)-1; ///< Static resources are always available
+          res.updates_unavailable = 0;
+        } else if (res.type == ResourceType::PERIODIC) {
+          // todo
+          // DECAY
+          // if available:
+          // - if (updates_available >= DECAY_DELAY)
+          //   - DECAY
+          //   - if still available, updates available += 1
+          // else:
+          // - If pulse & updates unavailable > 0:
+          //   - PULSE
+          // - else
+          //   - updates_unavailable++
+        }
+      }
+    }
   }
 
 public:
@@ -265,6 +275,34 @@ public:
 //                          DOLWorld member definitions
 // =============================================================================
 
+void DOLWorld::AttemptToMetabolize(size_t org_id, size_t cell_id, size_t resource_id) {
+  emp_assert(org_id < GetSize());
+  emp_assert(resource_id < TOTAL_RESOURCES);
+  emp_assert(cell_id < DEME_WIDTH * DEME_HEIGHT);
+  Deme & deme = GetDeme(org_id);
+  Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
+  Environment & local_env = GetEnvironment(org_id);
+  Resource & res_state = local_env.resources[resource_id];
+  // Only allow one attempt per update?
+  if (cell_hw.metabolized_on_advance[resource_id]) return;
+  // Attempt to consume!
+  if (res_state.available) {
+    // Attempt to consume resource
+    fun_consume_resource(org_id, cell_id, resource_id);
+  } else {
+    // Apply cost of attempting to metabolize unavailable resource
+    fun_consume_fail(org_id, cell_id, resource_id);
+  }
+  // Mark that we've attempted to consume!
+  cell_hw.metabolized_on_advance[resource_id] = true;
+}
+
+void DOLWorld::SetCellSensor(size_t org_id, size_t cell_id, size_t resource_id, bool value) {
+  Deme & deme = GetDeme(org_id);
+  Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
+  cell_hw.resource_sensors[resource_id] = value;
+}
+
 /// Localize configuration settings.
 void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   // MAIN Configuration Settings
@@ -281,6 +319,7 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   PERIODIC_RESOURCES__CONSUME_FIXED = config.PERIODIC_RESOURCES__CONSUME_FIXED();
   PERIODIC_RESOURCES__CONSUME_PROPORTIONAL = config.PERIODIC_RESOURCES__CONSUME_PROPORTIONAL();
   PERIODIC_RESOURCES__FAILURE_COST = config.PERIODIC_RESOURCES__FAILURE_COST();
+  PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE = config.PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE();
   STATIC_RESOURCES__LEVEL = config.STATIC_RESOURCES__LEVEL();
   STATIC_RESOURCES__CONSUME_FIXED = config.STATIC_RESOURCES__CONSUME_FIXED();
   STATIC_RESOURCES__CONSUME_PROPORTIONAL = config.STATIC_RESOURCES__CONSUME_PROPORTIONAL();
@@ -399,10 +438,10 @@ void DOLWorld::SetupInstructionSet() {
   // todo - 'movement' (rot-cw-45, rot-ccw-45, rot-90, rot-180, rot-nxt-neighbor)
   // todo - reproduction (???)
 
-  // todo - Add instructions to instruction set
+  // Add resource-specific instructions to instruction set
   for (size_t resource_id = 0; resource_id < TOTAL_RESOURCES; ++resource_id) {
     // - Add metabolize instructions for each resource
-    inst_lib->AddInst("Metabolize-" + emp::to_string(resource_id),
+    inst_lib->AddInst("Express-" + emp::to_string(resource_id),
       [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
         // Need to get world ID and cell ID
         const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
@@ -484,7 +523,7 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   // Setup deme hardware
   SetupDemeHardware();
   // Setup the environment
-  SetupEnvironment();
+  SetupEnvironment(); // todo - finish setting up the environment
 
   SetPopStruct_Mixed(false);  // Mixed population (at deme/organism-level), asynchronous generations
   SetAutoMutate(); // Mutations happen automatically when organisms are born (offspring_ready_sig)
@@ -500,7 +539,7 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     cell_hw.ActivateCell(org.GetGenome().program, org.GetGenome().birth_tag, sgp_memory_t(), true);
   };
 
-  // todo - make configurable
+  // What happens when an organism consumes a resource?
   if (RESOURCE_CONSUMPTION_MODE == "fixed") {
     fun_consume_resource = [this](size_t org_id, size_t cell_id, size_t resource_id) {
       org_t & org = GetOrg(org_id);
@@ -530,7 +569,8 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     exit(-1);
   }
 
-  // What happens when a resource consumption fails
+  // What happens when a resource consumption fails?
+  // (i.e., a misqueue? => attempted consumption when resource is unavailable)
   fun_consume_fail = [this](size_t org_id, size_t cell_id, size_t resource_id) {
     org_t & org = GetOrg(org_id);
     Environment & local_env = environments[org_id];
@@ -584,7 +624,6 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     return mutator.Mutate(org, r);
   });
 
-  // todo - setup environment
   // todo - setup systematics
 
   // todo - finish function
