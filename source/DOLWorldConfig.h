@@ -19,11 +19,21 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(INIT_POP_MODE, std::string, "random", "How should the population be initialized? Options:\n\t'random'"),
 
   GROUP(RESOURCES, "Resource Settings"),
-  VALUE(NUM_PERIODIC_RESOURCES, size_t, 8, "How many simple tasks should there be?"),
+  VALUE(RESOURCE_CONSUMPTION_MODE, std::string, "fixed", "How are resources consumed? Options:\n\t(1) 'fixed'\n\t(2) 'proportional'"),
+
+  VALUE(NUM_PERIODIC_RESOURCES, size_t, 4, "How many simple tasks should there be?"),
+  VALUE(PERIODIC_RESOURCES__LEVEL, double, 100.0, "How much of a periodic resource is made available on pulse?"),
+
+  VALUE(PERIODIC_RESOURCES__CONSUME_FIXED, double, 25.0, "How much of a periodic resource is collected when metabolized?"),
+  VALUE(PERIODIC_RESOURCES__CONSUME_PROPORTIONAL, double, 1.0, "How much of a periodic resource is collected when metabolized?"),
+  VALUE(PERIODIC_RESOURCES__FAILURE_COST, double, 0.0, "What is the cost of attempting to consume an unavailable static resource?"),
+
   VALUE(NUM_STATIC_RESOURCES, size_t, 1, "How many tasks are always rewarded?"),
   VALUE(STATIC_RESOURCES__LEVEL, double, 25.0, "How much of a static resource is made available every update?"),
-  VALUE(STATIC_RESOURCES__METABOLIZE, double, 25.0, "How much of a static resource is collected when metabolized?"),
-  VALUE(PERIODIC_RESOURCES__LEVEL, double, 100.0, "How much of a "),
+
+  VALUE(STATIC_RESOURCES__CONSUME_FIXED, double, 25.0, "How much of a static resource is collected when metabolized?"),
+  VALUE(STATIC_RESOURCES__CONSUME_PROPORTIONAL, double, 1.0, "How much of a static resource is collected when metabolized?"),
+  VALUE(STATIC_RESOURCES__FAILURE_COST, double, 0.0, "What is the cost of attempting to consume an unavailable static resource?"),
 
   GROUP(DEME, "Deme Settings"),
   VALUE(DEME_WIDTH, size_t, 5, "What is the maximum cell-width of a deme?"),

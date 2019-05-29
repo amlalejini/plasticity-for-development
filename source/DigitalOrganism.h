@@ -35,9 +35,25 @@ public:
   };
 
   struct Phenotype {
+    size_t age=0;                     ///< How many updates has this organism been alive?
     bool trigger_repro=false;         ///< Trigger reproduction?
     double resources_collected=0.0;   ///< How many resources has this organism collected?
-    size_t age=0;                     ///< How many updates has this organism been alive?
+    emp::vector<double> consumption_amount_by_type;
+    emp::vector<size_t> consumption_successes_by_type;
+    emp::vector<size_t> consumption_failures_by_type;
+
+    /// Reset this organism's phenotype
+    void Reset(size_t num_resources) {
+      trigger_repro=false;
+      resources_collected=0.0;
+      consumption_amount_by_type.clear();
+      consumption_amount_by_type.resize(num_resources, 0.0);
+      consumption_successes_by_type.clear();
+      consumption_successes_by_type.resize(num_resources, 0);
+      consumption_failures_by_type.clear();
+      consumption_failures_by_type.resize(num_resources, 0);
+      age=0;
+    }
   };
 
 protected:
@@ -66,7 +82,13 @@ public:
   /// Set organism id
   void SetOrgID(size_t val) { org_id = val; }
 
+  void PrettyPrintPhenotype(std::ostream & os = std::cout);
+
 };
+
+void DigitalOrganism::PrettyPrintPhenotype(std::ostream & os /*= std::cout*/) {
+  // todo
+}
 
 // Generate and return a digital organism with a random genome.
 // - Makes use of signalgp_utils.h's generate random program & random tag functions.

@@ -7,6 +7,9 @@
 #include "DOLWorldConfig.h"
 #include "DigitalOrganism.h"
 
+// Tests
+// - [ ] Test that phenotypes are property reset on birth/placement!
+
 /// Given a DOLWorldConfig and a DigitalOrganism genome, validate genome against
 /// configuration settings.
 bool ValidateDigitalOrganismGenome(const DOLWorldConfig & config,

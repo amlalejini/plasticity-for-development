@@ -36,13 +36,19 @@ public:
   using sgp_hardware_t = emp::EventDrivenGP_AW<DOLWorldConstants::TAG_WIDTH>;
   using sgp_program_t = typename sgp_hardware_t::Program;
   using sgp_memory_t = typename sgp_hardware_t::memory_t;
+  using sgp_inst_t = typename sgp_hardware_t::inst_t;
   using tag_t = typename sgp_hardware_t::affinity_t;
   using inst_lib_t = typename sgp_hardware_t::inst_lib_t;
   using event_lib_t = typename sgp_hardware_t::event_lib_t;
 
+  using sgp_trait_ids_t = typename Deme::CellularHardware::SGPTraitIDs;
+
   using deme_seed_fun_t = std::function<void(Deme&, org_t&)>;
+  using consume_resource_fun_t = std::function<void(size_t,size_t,size_t)>;
 
   enum class ResourceType { STATIC, PERIODIC };
+
+  static constexpr double MIN_RESOURCE_AMOUNT = 0.001;
 
   struct Resource {
     size_t resource_id=(size_t)-1; ///< Resource identifier
@@ -58,13 +64,39 @@ public:
     }
 
     /// Attempt to consume an amount of this resource
-    double Consume(double value) {
-      return 0.0;
+    double ConsumeFixed(double value) {
+      double consumed = 0;
+      if (value > amount) {
+        // Requesting more resource than available
+        // - Consume everything.
+        consumed = amount;
+        amount = 0;
+      } else {
+        // Consume requested amount
+        consumed = value;
+        amount -= value;
+      }
+      // Is resource level below minimum threshold?
+      // - if so, mark unavailable
+      if (amount < MIN_RESOURCE_AMOUNT) {
+        amount = 0.0;
+        available = false;
+        updates_available = 0;
+      }
+      // return amount consumed
+      return consumed;
     }
 
     /// Attempt to consume a fixed proportion
     double ConsumeProportion(double prop) {
-      return 0.0;
+      double consumed = prop*amount;
+      amount -= consumed;
+      if (amount < MIN_RESOURCE_AMOUNT) {
+        amount = 0.0;
+        available = false;
+        updates_available = 0;
+      }
+      return consumed;
     }
 
     void DecayAmount(double value);
@@ -79,7 +111,13 @@ public:
   /// Each deme has a local environment
   struct Environment {
     size_t env_id;                    ///< Corresponds to associated deme_id (& org id)
-    std::vector<Resource> resources;
+    emp::vector<Resource> resources;
+
+    void Reset() {
+      for (Resource & res : resources) {
+        res.Reset();
+      }
+    }
   };
 
 protected:
@@ -92,8 +130,17 @@ protected:
   size_t MAX_POP_SIZE;
   std::string INIT_POP_MODE;
   // RESOURCES Configuration Settings
+  std::string RESOURCE_CONSUMPTION_MODE;
   size_t NUM_PERIODIC_RESOURCES;
+  double PERIODIC_RESOURCES__LEVEL;
+  double PERIODIC_RESOURCES__CONSUME_FIXED;
+  double PERIODIC_RESOURCES__CONSUME_PROPORTIONAL;
+  double PERIODIC_RESOURCES__FAILURE_COST;
   size_t NUM_STATIC_RESOURCES;
+  double STATIC_RESOURCES__LEVEL;
+  double STATIC_RESOURCES__CONSUME_FIXED;
+  double STATIC_RESOURCES__CONSUME_PROPORTIONAL;
+  double STATIC_RESOURCES__FAILURE_COST;
   // DEME Configuration Settings
   size_t DEME_WIDTH;
   size_t DEME_HEIGHT;
@@ -128,11 +175,15 @@ protected:
   Mutator mutator;
 
   emp::vector<Environment> environments;  ///< Each organism (and deme) is has a local environment
+  size_t TOTAL_RESOURCES;
 
   emp::vector<Deme> demes;
   emp::vector<size_t> birth_chamber; ///< IDs of organisms ready to reproduce!
 
   deme_seed_fun_t fun_seed_deme;
+
+  consume_resource_fun_t fun_consume_resource;
+  consume_resource_fun_t fun_consume_fail;
 
   // Internal functions
   void InitConfigs(DOLWorldConfig & config);
@@ -143,6 +194,35 @@ protected:
   void SetupDemeHardware();
   void SetupInstructionSet();
   void SetupEnvironment();
+
+  /// Attempt to metabolize resource
+  void AttemptToMetabolize(size_t org_id, size_t cell_id, size_t resource_id) {
+    emp_assert(org_id < GetSize());
+    emp_assert(resource_id < TOTAL_RESOURCES);
+    emp_assert(cell_id < DEME_WIDTH * DEME_HEIGHT);
+    Deme & deme = GetDeme(org_id);
+    Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
+    Environment & local_env = GetEnvironment(org_id);
+    Resource & res_state = local_env.resources[resource_id];
+    // Only allow one attempt per update?
+    if (cell_hw.metabolized_on_advance[resource_id]) return;
+    // Attempt to consume!
+    if (res_state.available) {
+      // Attempt to consume resource
+      fun_consume_resource(org_id, cell_id, resource_id);
+    } else {
+      // Apply cost of attempting to metabolize unavailable resource
+      fun_consume_fail(org_id, cell_id, resource_id);
+    }
+    // Mark that we've attempted to consume!
+    cell_hw.metabolized_on_advance[resource_id] = true;
+  }
+
+  void SetCellSensor(size_t org_id, size_t cell_id, size_t resource_id, bool value) {
+    Deme & deme = GetDeme(org_id);
+    Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
+    cell_hw.resource_sensors[resource_id] = value;
+  }
 
 public:
 
@@ -165,6 +245,10 @@ public:
   /// Get deme @ position ID
   Deme & GetDeme(size_t id) { return demes[id]; }
   const Deme & GetDeme(size_t id) const { return demes[id]; }
+
+  /// Get local environment @ position ID
+  Environment & GetEnvironment(size_t id) { return environments[id]; }
+  const Environment & GetEnvironment(size_t id) const { return environments[id]; }
 
   /// Just give 'em access to all da demes!
   emp::vector<Deme> & GetDemes() { return demes; }
@@ -192,6 +276,15 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   // RESOURCES Configuration Settings
   NUM_PERIODIC_RESOURCES = config.NUM_PERIODIC_RESOURCES();
   NUM_STATIC_RESOURCES = config.NUM_STATIC_RESOURCES();
+  RESOURCE_CONSUMPTION_MODE = config.RESOURCE_CONSUMPTION_MODE();
+  PERIODIC_RESOURCES__LEVEL = config.PERIODIC_RESOURCES__LEVEL();
+  PERIODIC_RESOURCES__CONSUME_FIXED = config.PERIODIC_RESOURCES__CONSUME_FIXED();
+  PERIODIC_RESOURCES__CONSUME_PROPORTIONAL = config.PERIODIC_RESOURCES__CONSUME_PROPORTIONAL();
+  PERIODIC_RESOURCES__FAILURE_COST = config.PERIODIC_RESOURCES__FAILURE_COST();
+  STATIC_RESOURCES__LEVEL = config.STATIC_RESOURCES__LEVEL();
+  STATIC_RESOURCES__CONSUME_FIXED = config.STATIC_RESOURCES__CONSUME_FIXED();
+  STATIC_RESOURCES__CONSUME_PROPORTIONAL = config.STATIC_RESOURCES__CONSUME_PROPORTIONAL();
+  STATIC_RESOURCES__FAILURE_COST = config.STATIC_RESOURCES__FAILURE_COST();
   // DEME Configuration Settings
   DEME_WIDTH = config.DEME_WIDTH();
   DEME_HEIGHT = config.DEME_HEIGHT();
@@ -216,7 +309,8 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   PROGRAM_FUNC_DEL__PER_FUN = config.PROGRAM_FUNC_DEL__PER_FUN();
   PROGRAM_TAG_BIT_FLIP__PER_BIT = config.PROGRAM_TAG_BIT_FLIP__PER_BIT();
   BIRTH_TAG_BIT_FLIP__PER_BIT = config.BIRTH_TAG_BIT_FLIP__PER_BIT();
-
+  // Various constants that depend on configuration parameters
+  TOTAL_RESOURCES = NUM_PERIODIC_RESOURCES + NUM_STATIC_RESOURCES;
   // Verify some requirements
   emp_assert(MIN_FUNCTION_CNT > 0);
   emp_assert(MIN_FUNCTION_LEN > 0);
@@ -253,7 +347,6 @@ void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
 void DOLWorld::SetupDemeHardware() {
   std::cout << "DOLWorld - Setup - DemeHardware" << std::endl;
   demes.clear();
-
   // Add one deme hardware unit for every possible member of the population
   for (size_t i = 0; i < MAX_POP_SIZE; ++i) {
     /*Deme(size_t _width, size_t _height, emp::Ptr<emp::Random> _rnd,
@@ -264,6 +357,7 @@ void DOLWorld::SetupDemeHardware() {
     demes.back().SetCellHardwareMaxCallDepth(SGP_MAX_CALL_DEPTH);
     demes.back().SetCellHardwareMinTagMatchThreshold(SGP_MIN_TAG_MATCH_THRESHOLD);
     demes.back().SetCellHardwareStochasticTieBreaks(false); // make tag-based referencing deterministic
+    demes.back().SetupCellMetabolism(TOTAL_RESOURCES);
     // TODO - any non-constructor deme configuration
   }
 }
@@ -304,6 +398,37 @@ void DOLWorld::SetupInstructionSet() {
   // todo - odometry (facing)
   // todo - 'movement' (rot-cw-45, rot-ccw-45, rot-90, rot-180, rot-nxt-neighbor)
   // todo - reproduction (???)
+
+  // todo - Add instructions to instruction set
+  for (size_t resource_id = 0; resource_id < TOTAL_RESOURCES; ++resource_id) {
+    // - Add metabolize instructions for each resource
+    inst_lib->AddInst("Metabolize-" + emp::to_string(resource_id),
+      [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+        // Need to get world ID and cell ID
+        const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+        const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+        // Attempt to consume resource
+        this->AttemptToMetabolize(world_id, cell_id, resource_id);
+      }, 0, "Attempt to metabolize resource " + emp::to_string(resource_id));
+
+    // - Add sensor activation instruction for each resource
+    inst_lib->AddInst("ActivateSensor-" + emp::to_string(resource_id),
+      [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+        // Need to get world ID and cell ID
+        const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+        const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+        this->SetCellSensor(world_id, cell_id, resource_id, true);
+      }, 0, "Activate sensor for resource " + emp::to_string(resource_id));
+
+    // - Add sensor deactivation instruction for each resource
+    inst_lib->AddInst("DeactivateSensor-" + emp::to_string(resource_id),
+      [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+        // Need to get world ID and cell ID
+        const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+        const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+        this->SetCellSensor(world_id, cell_id, resource_id, false);
+      }, 0, "Deactivate sensor for resource " + emp::to_string(resource_id));
+  }
 }
 
 /// Setup the environment (might add instructions to the instruction set!)
@@ -326,7 +451,7 @@ void DOLWorld::SetupEnvironment() {
     }
     // How many periodic resources?
     while (taskID < NUM_STATIC_RESOURCES + NUM_PERIODIC_RESOURCES) {
-      std::cout << "Configuring resource " << taskID << " (PERIODIC)" << std::endl;
+      // std::cout << "Configuring resource " << taskID << " (PERIODIC)" << std::endl;
       env.resources[taskID].resource_id = taskID;
       env.resources[taskID].type = ResourceType::PERIODIC;
       env.resources[taskID].Reset();
@@ -335,7 +460,7 @@ void DOLWorld::SetupEnvironment() {
   }
   std::cout << "Configured " << environments.size() << " environments, each with " << environments.back().resources.size() << " resources." << std::endl;
 
-  // Add instructions to instruction set
+  // todo - environmental change??
 }
 
 /// Setup the experiment.
@@ -354,8 +479,8 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   event_lib = emp::NewPtr<event_lib_t>();
 
   // todo - setup setup signalgp instruction/event libraries
+  // Setup instruction set
   SetupInstructionSet();
-
   // Setup deme hardware
   SetupDemeHardware();
   // Setup the environment
@@ -375,6 +500,60 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     cell_hw.ActivateCell(org.GetGenome().program, org.GetGenome().birth_tag, sgp_memory_t(), true);
   };
 
+  // todo - make configurable
+  if (RESOURCE_CONSUMPTION_MODE == "fixed") {
+    fun_consume_resource = [this](size_t org_id, size_t cell_id, size_t resource_id) {
+      org_t & org = GetOrg(org_id);
+      Environment & local_env = environments[org_id];
+      Resource & res_state = local_env.resources[resource_id];
+      double collected = res_state.ConsumeFixed((res_state.type == ResourceType::STATIC) ? STATIC_RESOURCES__CONSUME_FIXED : PERIODIC_RESOURCES__CONSUME_FIXED);
+      // Collect those sweet delicious resources!
+      org.GetPhenotype().resources_collected += collected;
+      // Track consumption info
+      org.GetPhenotype().consumption_amount_by_type[resource_id] += collected;
+      org.GetPhenotype().consumption_successes_by_type[resource_id] += 1;
+    };
+  } else if (RESOURCE_CONSUMPTION_MODE == "proportional") {
+    fun_consume_resource = [this](size_t org_id, size_t cell_id, size_t resource_id) {
+      org_t & org = GetOrg(org_id);
+      Environment & local_env = environments[org_id];
+      Resource & res_state = local_env.resources[resource_id];
+      double collected = res_state.ConsumeProportion((res_state.type == ResourceType::STATIC) ? STATIC_RESOURCES__CONSUME_PROPORTIONAL : PERIODIC_RESOURCES__CONSUME_PROPORTIONAL);
+      // Collect those sweet delicious resources!
+      org.GetPhenotype().resources_collected += collected;
+      // Track consumption info
+      org.GetPhenotype().consumption_amount_by_type[resource_id] += collected;
+      org.GetPhenotype().consumption_successes_by_type[resource_id] += 1;
+    };
+  } else {
+    std::cout << "Unrecognized RESOURCE_CONSUMPTION_MODE (" << RESOURCE_CONSUMPTION_MODE << ")! Exiting." << std::endl;
+    exit(-1);
+  }
+
+  // What happens when a resource consumption fails
+  fun_consume_fail = [this](size_t org_id, size_t cell_id, size_t resource_id) {
+    org_t & org = GetOrg(org_id);
+    Environment & local_env = environments[org_id];
+    Resource & res_state = local_env.resources[resource_id];
+    switch (res_state.type) {
+      case ResourceType::STATIC: {
+        org.GetPhenotype().resources_collected -= STATIC_RESOURCES__FAILURE_COST;
+        break;
+      }
+      case ResourceType::PERIODIC: {
+        org.GetPhenotype().resources_collected -= PERIODIC_RESOURCES__FAILURE_COST;
+        break;
+      }
+      default: {
+        emp_assert(false, "Trying to penalize organism for consuming unrecognized resource type!");
+      }
+    }
+    // Don't let organism get into resource debt!
+    if (org.GetPhenotype().resources_collected < 0) org.GetPhenotype().resources_collected = 0.0;
+    // Track consumption misqueue
+    org.GetPhenotype().consumption_failures_by_type[resource_id]++;
+  };
+
   // What to do when an organism dies?
   // - deactivate the deme hardware
   OnOrgDeath([this](size_t pos) {
@@ -390,6 +569,14 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     placed_org.SetOrgID(pos);
     fun_seed_deme(focal_deme, placed_org);
     focal_deme.ActivateDeme();
+    // Reset the local environment
+    Environment & local_env = environments[pos];
+    local_env.Reset();
+  });
+
+  // Todo
+  OnOffspringReady([this](org_t & org, size_t parent_pos) {
+    org.GetPhenotype().Reset(TOTAL_RESOURCES);
   });
 
   // Setup mutate function
@@ -403,6 +590,12 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   // todo - finish function
 
   InitPop(config);
+
+  // Reset phenotypes of initial population
+  for (size_t i = 0; i < GetSize(); ++i) {
+    if (!IsOccupied(i)) continue;
+    GetOrg(i).GetPhenotype().Reset(TOTAL_RESOURCES);
+  }
 
   // todo - configure world appropriately (e.g., asynchronous, mixed)
   setup = true;

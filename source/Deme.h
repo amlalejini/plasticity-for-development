@@ -43,9 +43,13 @@ public:
     sgp_hardware_t sgp_hw;
     bool active = false;
 
+    // SignalGP trait ids
+    // -
+    enum SGPTraitIDs { TRAIT_ID__DEME_ID=0, TRAIT_ID__CELL_ID=1 };
+
     // - sensors: emp::vector<size_t> sensors;
-    // - sensor refractory state: emp::vector<size_t> refractory_states;
-    emp::vector<bool> metabolism; ///< Which resources is cell attempting to metabolize?
+    emp::vector<bool> resource_sensors;         ///< One sensor per resource
+    emp::vector<bool> metabolized_on_advance;    ///< Which resources is cell attempting to metabolize?
 
     CellularHardware(emp::Ptr<emp::Random> _rnd, emp::Ptr<inst_lib_t> _inst_lib,
                      emp::Ptr<event_lib_t> _event_lib)
@@ -54,7 +58,15 @@ public:
     /// On reset:
     /// - reset signalgp hardware & program
     /// - todo - clear out traits (non-permanent ones)
-    void Reset() { sgp_hw.ResetProgram(); active = false; }
+    void Reset() {
+      emp_assert(resource_sensors.size() == metabolized_on_advance.size());
+      sgp_hw.ResetProgram();
+      active = false;
+      for (size_t i = 0; i < resource_sensors.size(); ++i) {
+        resource_sensors[i] = false;
+        metabolized_on_advance[i] = false;
+      }
+    }
 
     void ActivateCell(const sgp_program_t & program,
                       const tag_t & init_tag,
@@ -94,10 +106,14 @@ public:
     for (size_t i = 0; i < width*height; ++i) {
       cells.emplace_back(_rnd, _inst_lib, _event_lib);
       cells.back().cell_id = i; // Cell id corresponds to position in cells vector
+      cells.back().sgp_hw.SetTrait(CellularHardware::SGPTraitIDs::TRAIT_ID__CELL_ID, i);
       cell_schedule.emplace_back(i);
     }
     BuildNeighborLookup();
   }
+
+  /// Setup cell metabolisms
+  void SetupCellMetabolism(size_t num_resources);
 
   /// Get this deme's id
   size_t GetDemeID() const { return deme_id; }
@@ -127,7 +143,7 @@ public:
   size_t GetNeighboringCellID(size_t id, Facing dir) const { return neighbor_lookup[id*NUM_DIRECTIONS + (size_t)dir]; }
 
   /// Set this deme's ID
-  void SetDemeID(size_t id) { deme_id = id; }
+  void SetDemeID(size_t id);
 
   /// Set SignalGP hardware (on cellular hardware) maximum thread count
   void SetCellHardwareMaxThreads(size_t val);
@@ -143,6 +159,7 @@ public:
 
   /// Activate deme - todo - maybe more required to activate deme (e.g., loading a digital organism)
   /// - used to flag that deme is currently active (running)
+  /// todo - take ids of cells to activate!
   void ActivateDeme() {
     deme_active = true;
   }
@@ -156,6 +173,13 @@ public:
   }
 
   void Advance(size_t steps) {
+    // Reset each cell's metabolism tracker
+    for (CellularHardware & cell : cells) {
+      for (size_t m = 0; m < cell.metabolized_on_advance.size(); ++m) {
+        cell.metabolized_on_advance[m] = false;
+      }
+    }
+    // Advance the deme hardware!
     for (size_t i = 0; i < steps; ++i) {
       SingleAdvance();
     }
@@ -228,6 +252,22 @@ size_t Deme::CalcNeighbor(size_t id, Facing dir) const {
       break;
   }
   return GetCellID(facing_x, facing_y);
+}
+
+void Deme::SetupCellMetabolism(size_t num_resources) {
+  for (CellularHardware & cell : cells) {
+    cell.metabolized_on_advance.clear();
+    cell.resource_sensors.clear();
+    cell.metabolized_on_advance.resize(num_resources, false);
+    cell.resource_sensors.resize(num_resources, false);
+  }
+}
+
+void Deme::SetDemeID(size_t id) {
+  deme_id = id;
+  for (CellularHardware & cell : cells) {
+    cell.sgp_hw.SetTrait(CellularHardware::SGPTraitIDs::TRAIT_ID__DEME_ID, id);
+  }
 }
 
 /// Set SignalGP hardware (on cellular hardware) maximum thread count
