@@ -28,6 +28,7 @@
 #include "DigitalOrganism.h"
 #include "Deme.h"
 #include "Mutator.h"
+#include "Resource.h"
 
 class DOLWorld : public emp::World<DigitalOrganism> {
 public:
@@ -46,93 +47,6 @@ public:
   using deme_seed_fun_t = std::function<void(Deme&, org_t&)>;
   using consume_resource_fun_t = std::function<void(size_t,size_t,size_t)>;
   using decay_resource_fun_t = std::function<void(size_t,size_t)>;
-
-  enum class ResourceType { STATIC, PERIODIC };
-
-  static constexpr double MIN_RESOURCE_AMOUNT = 0.001;
-
-  // todo - test resource in isolation!
-  // todo - move definition outside of world!
-  struct Resource {
-    size_t resource_id=(size_t)-1; ///< Resource identifier
-    ResourceType type=ResourceType::STATIC;
-    double amount=0;               ///< How much resource is available?
-    bool available=false;          ///< Is the resource available?
-    size_t updates_available=0;    ///< Accumulator; how many updates has this resource been 'available'?
-    size_t updates_unavailable=0;
-
-    void Reset() {
-      amount = 0;
-      available = false;
-      updates_available = 0;
-      updates_unavailable = 0;
-    }
-
-    /// Attempt to consume an amount of this resource
-    double ConsumeFixed(double value) {
-      double consumed = 0;
-      if (value > amount) {
-        // Requesting more resource than available
-        // - Consume everything.
-        consumed = amount;
-        amount = 0;
-      } else {
-        // Consume requested amount
-        consumed = value;
-        amount -= value;
-      }
-      // Is resource level below minimum threshold?
-      // - if so, mark unavailable
-      if (amount < MIN_RESOURCE_AMOUNT) {
-        amount = 0.0;
-        available = false;
-        updates_available = 0;
-      }
-      // return amount consumed
-      return consumed;
-    }
-
-    /// Attempt to consume a fixed proportion
-    double ConsumeProportion(double prop) {
-      double consumed = prop*amount;
-      amount -= consumed;
-      if (amount < MIN_RESOURCE_AMOUNT) {
-        amount = 0.0;
-        available = false;
-        updates_available = 0;
-      }
-      return consumed;
-    }
-
-    void DecayFixed(double value) {
-      if (value > amount) {
-        // Decaying more resource than available, decay all.
-        amount = 0.0;
-      } else {
-        // Decay the requested amount
-        amount -= value;
-      }
-      // Is resource level below the minimum threshold?
-      if (amount < MIN_RESOURCE_AMOUNT) {
-        amount = 0.0;
-        available = false;
-        updates_available = 0;
-      }
-    }
-
-    void DecayProportion(double prop) {
-      amount -= prop*amount;
-      if (amount < MIN_RESOURCE_AMOUNT) {
-        amount = 0.0;
-        available = false;
-        updates_available = 0;
-      }
-    }
-
-    void SetAmount(double value) { emp_assert(value >= 0); amount = value; }
-    void IncAmount(double value) { emp_assert(amount + value >= 0); amount += value; }
-
-  };
 
   /// Each deme has a local environment
   struct Environment {
@@ -242,33 +156,26 @@ protected:
       // Update resources
       for (size_t res_id = 0; res_id < local_env.resources.size(); ++res_id) {
         Resource & res = local_env.resources[res_id];
-        if (res.type == ResourceType::STATIC) { // Handle STATIC resource
+        if (res.GetType() == ResourceType::STATIC) { // Handle STATIC resource
           // Replinish resource levels
-          res.available = true;
-          res.amount = STATIC_RESOURCES__LEVEL;
-          res.updates_available = (size_t)-1; ///< Static resources are always available
-          res.updates_unavailable = 0;
-        } else if (res.type == ResourceType::PERIODIC) { // Handle PERIODIC resource
+          res.SetAmount(STATIC_RESOURCES__LEVEL);
+        } else if (res.GetType() == ResourceType::PERIODIC) { // Handle PERIODIC resource
           // If the resource is available, decay that resource.
           // else, if resource is unavailble, decide whether or not to pulse the resource
-          if (res.available) {
-            if (res.updates_available >= PERIODIC_RESOURCES__DECAY_DELAY) {
-              // Decay the resource!
+          if (res.IsAvailable()) {
+            // If resource has been available for at least as long as the decay delay, decay the resource!
+            if (res.GetTimeAvailable() >= PERIODIC_RESOURCES__DECAY_DELAY) {
               fun_decay_resource(env_id, res_id);
             }
           } else {
-            if (res.updates_unavailable >= PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE && random_ptr->P(PERIODIC_RESOURCES__PULSE_PROB)) {
-              // Pulse resource!
-              res.available = true;
-              res.amount = PERIODIC_RESOURCES__LEVEL;
-              res.updates_available = 0;
-              res.updates_unavailable = 0;
+            // Pulse resource (maybe)!
+            if (res.GetTimeUnavailable() >= PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE && random_ptr->P(PERIODIC_RESOURCES__PULSE_PROB)) {
+              res.SetAmount(PERIODIC_RESOURCES__LEVEL);
             }
           }
-          // Update resource availability tracking
-          if (res.available) res.updates_available++;  // The resource will be available for this update
-          else res.updates_unavailable++; // The resource won't be available for this update
         }
+        // advance time on this resource!
+        res.AdvanceAvailabilityTracking();
       }
     }
   }
@@ -325,7 +232,7 @@ void DOLWorld::AttemptToMetabolize(size_t org_id, size_t cell_id, size_t resourc
   // Only allow one attempt per update?
   if (cell_hw.metabolized_on_advance[resource_id]) return;
   // Attempt to consume!
-  if (res_state.available) {
+  if (res_state.IsAvailable()) {
     // Attempt to consume resource
     fun_consume_resource(org_id, cell_id, resource_id);
   } else {
@@ -527,16 +434,16 @@ void DOLWorld::SetupEnvironment() {
     // How many static resources?
     while (taskID < NUM_STATIC_RESOURCES) {
       // std::cout << "Configuring resource " << taskID << " (STATIC)" << std::endl;
-      env.resources[taskID].resource_id = taskID;
-      env.resources[taskID].type = ResourceType::STATIC;
+      env.resources[taskID].SetID(taskID);
+      env.resources[taskID].SetType(ResourceType::STATIC);
       env.resources[taskID].Reset();
       ++taskID;
     }
     // How many periodic resources?
     while (taskID < NUM_STATIC_RESOURCES + NUM_PERIODIC_RESOURCES) {
       // std::cout << "Configuring resource " << taskID << " (PERIODIC)" << std::endl;
-      env.resources[taskID].resource_id = taskID;
-      env.resources[taskID].type = ResourceType::PERIODIC;
+      env.resources[taskID].SetID(taskID);
+      env.resources[taskID].SetType(ResourceType::PERIODIC);
       env.resources[taskID].Reset();
       ++taskID;
     }
@@ -565,8 +472,9 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   // Setup deme hardware
   SetupDemeHardware();
   // Setup the environment
-  SetupEnvironment(); // todo - finish setting up the environment
+  SetupEnvironment();
 
+  // Tell the emp::World how to be
   SetPopStruct_Mixed(false);  // Mixed population (at deme/organism-level), asynchronous generations
   SetAutoMutate(); // Mutations happen automatically when organisms are born (offspring_ready_sig)
 
@@ -587,7 +495,7 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
       org_t & org = GetOrg(org_id);
       Environment & local_env = environments[org_id];
       Resource & res_state = local_env.resources[resource_id];
-      double collected = res_state.ConsumeFixed((res_state.type == ResourceType::STATIC) ? STATIC_RESOURCES__CONSUME_FIXED : PERIODIC_RESOURCES__CONSUME_FIXED);
+      double collected = res_state.ConsumeFixed((res_state.GetType() == ResourceType::STATIC) ? STATIC_RESOURCES__CONSUME_FIXED : PERIODIC_RESOURCES__CONSUME_FIXED);
       // Collect those sweet delicious resources!
       org.GetPhenotype().resources_collected += collected;
       // Track consumption info
@@ -599,7 +507,7 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
       org_t & org = GetOrg(org_id);
       Environment & local_env = environments[org_id];
       Resource & res_state = local_env.resources[resource_id];
-      double collected = res_state.ConsumeProportion((res_state.type == ResourceType::STATIC) ? STATIC_RESOURCES__CONSUME_PROPORTIONAL : PERIODIC_RESOURCES__CONSUME_PROPORTIONAL);
+      double collected = res_state.ConsumeProportion((res_state.GetType() == ResourceType::STATIC) ? STATIC_RESOURCES__CONSUME_PROPORTIONAL : PERIODIC_RESOURCES__CONSUME_PROPORTIONAL);
       // Collect those sweet delicious resources!
       org.GetPhenotype().resources_collected += collected;
       // Track consumption info
@@ -617,7 +525,7 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     org_t & org = GetOrg(org_id);
     Environment & local_env = environments[org_id];
     Resource & res_state = local_env.resources[resource_id];
-    switch (res_state.type) {
+    switch (res_state.GetType()) {
       case ResourceType::STATIC: {
         org.GetPhenotype().resources_collected -= STATIC_RESOURCES__FAILURE_COST;
         break;
@@ -685,8 +593,6 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
 
   // todo - setup systematics
 
-  // todo - finish function
-
   InitPop(config);
 
   // Reset phenotypes of initial population
@@ -695,9 +601,9 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     GetOrg(i).GetPhenotype().Reset(TOTAL_RESOURCES);
   }
 
-  // todo - configure world appropriately (e.g., asynchronous, mixed)
   setup = true;
   emp_assert(pop.size() == demes.size(), "SETUP ERROR! Population vector size (", pop.size(), ")", "does not match deme vector size (", demes.size(), ").");
+  emp_assert(pop.size() == environments.size(), "SETUP ERROR! Population vector size (", pop.size(), ")", "does not match environments vector size (", environments.size(), ").");
 }
 
 void DOLWorld::RunStep() {
