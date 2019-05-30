@@ -45,11 +45,14 @@ public:
 
   using deme_seed_fun_t = std::function<void(Deme&, org_t&)>;
   using consume_resource_fun_t = std::function<void(size_t,size_t,size_t)>;
+  using decay_resource_fun_t = std::function<void(size_t,size_t)>;
 
   enum class ResourceType { STATIC, PERIODIC };
 
   static constexpr double MIN_RESOURCE_AMOUNT = 0.001;
 
+  // todo - test resource in isolation!
+  // todo - move definition outside of world!
   struct Resource {
     size_t resource_id=(size_t)-1; ///< Resource identifier
     ResourceType type=ResourceType::STATIC;
@@ -101,9 +104,30 @@ public:
       return consumed;
     }
 
-    void DecayAmount(double value);
+    void DecayFixed(double value) {
+      if (value > amount) {
+        // Decaying more resource than available, decay all.
+        amount = 0.0;
+      } else {
+        // Decay the requested amount
+        amount -= value;
+      }
+      // Is resource level below the minimum threshold?
+      if (amount < MIN_RESOURCE_AMOUNT) {
+        amount = 0.0;
+        available = false;
+        updates_available = 0;
+      }
+    }
 
-    void DecayProportion(double prop);
+    void DecayProportion(double prop) {
+      amount -= prop*amount;
+      if (amount < MIN_RESOURCE_AMOUNT) {
+        amount = 0.0;
+        available = false;
+        updates_available = 0;
+      }
+    }
 
     void SetAmount(double value) { emp_assert(value >= 0); amount = value; }
     void IncAmount(double value) { emp_assert(amount + value >= 0); amount += value; }
@@ -133,17 +157,23 @@ protected:
   std::string INIT_POP_MODE;
   // RESOURCES Configuration Settings
   std::string RESOURCE_CONSUMPTION_MODE;
+  std::string RESOURCE_DECAY_MODE;
   size_t NUM_PERIODIC_RESOURCES;
   double PERIODIC_RESOURCES__LEVEL;
   double PERIODIC_RESOURCES__CONSUME_FIXED;
   double PERIODIC_RESOURCES__CONSUME_PROPORTIONAL;
   double PERIODIC_RESOURCES__FAILURE_COST;
+  size_t PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE;
+  size_t PERIODIC_RESOURCES__DECAY_DELAY;
+  double PERIODIC_RESOURCES__DECAY_FIXED;
+  double PERIODIC_RESOURCES__DECAY_PROPORTIONAL;
   size_t NUM_STATIC_RESOURCES;
   double STATIC_RESOURCES__LEVEL;
   double STATIC_RESOURCES__CONSUME_FIXED;
   double STATIC_RESOURCES__CONSUME_PROPORTIONAL;
   double STATIC_RESOURCES__FAILURE_COST;
-  size_t PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE;
+  double PERIODIC_RESOURCES__PULSE_PROB;
+
   // DEME Configuration Settings
   size_t DEME_WIDTH;
   size_t DEME_HEIGHT;
@@ -187,6 +217,7 @@ protected:
 
   consume_resource_fun_t fun_consume_resource;
   consume_resource_fun_t fun_consume_fail;
+  decay_resource_fun_t fun_decay_resource;
 
   // Internal functions
   void InitConfigs(DOLWorldConfig & config);
@@ -211,24 +242,32 @@ protected:
       // Update resources
       for (size_t res_id = 0; res_id < local_env.resources.size(); ++res_id) {
         Resource & res = local_env.resources[res_id];
-        if (res.type == ResourceType::STATIC) {
+        if (res.type == ResourceType::STATIC) { // Handle STATIC resource
           // Replinish resource levels
           res.available = true;
           res.amount = STATIC_RESOURCES__LEVEL;
           res.updates_available = (size_t)-1; ///< Static resources are always available
           res.updates_unavailable = 0;
-        } else if (res.type == ResourceType::PERIODIC) {
-          // todo
-          // DECAY
-          // if available:
-          // - if (updates_available >= DECAY_DELAY)
-          //   - DECAY
-          //   - if still available, updates available += 1
-          // else:
-          // - If pulse & updates unavailable > 0:
-          //   - PULSE
-          // - else
-          //   - updates_unavailable++
+        } else if (res.type == ResourceType::PERIODIC) { // Handle PERIODIC resource
+          // If the resource is available, decay that resource.
+          // else, if resource is unavailble, decide whether or not to pulse the resource
+          if (res.available) {
+            if (res.updates_available >= PERIODIC_RESOURCES__DECAY_DELAY) {
+              // Decay the resource!
+              fun_decay_resource(env_id, res_id);
+            }
+          } else {
+            if (res.updates_unavailable >= PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE && random_ptr->P(PERIODIC_RESOURCES__PULSE_PROB)) {
+              // Pulse resource!
+              res.available = true;
+              res.amount = PERIODIC_RESOURCES__LEVEL;
+              res.updates_available = 0;
+              res.updates_unavailable = 0;
+            }
+          }
+          // Update resource availability tracking
+          if (res.available) res.updates_available++;  // The resource will be available for this update
+          else res.updates_unavailable++; // The resource won't be available for this update
         }
       }
     }
@@ -315,11 +354,16 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   NUM_PERIODIC_RESOURCES = config.NUM_PERIODIC_RESOURCES();
   NUM_STATIC_RESOURCES = config.NUM_STATIC_RESOURCES();
   RESOURCE_CONSUMPTION_MODE = config.RESOURCE_CONSUMPTION_MODE();
+  RESOURCE_DECAY_MODE = config.RESOURCE_DECAY_MODE();
   PERIODIC_RESOURCES__LEVEL = config.PERIODIC_RESOURCES__LEVEL();
   PERIODIC_RESOURCES__CONSUME_FIXED = config.PERIODIC_RESOURCES__CONSUME_FIXED();
   PERIODIC_RESOURCES__CONSUME_PROPORTIONAL = config.PERIODIC_RESOURCES__CONSUME_PROPORTIONAL();
   PERIODIC_RESOURCES__FAILURE_COST = config.PERIODIC_RESOURCES__FAILURE_COST();
   PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE = config.PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE();
+  PERIODIC_RESOURCES__DECAY_DELAY = config.PERIODIC_RESOURCES__DECAY_DELAY();
+  PERIODIC_RESOURCES__DECAY_FIXED = config.PERIODIC_RESOURCES__DECAY_FIXED();
+  PERIODIC_RESOURCES__DECAY_PROPORTIONAL = config.PERIODIC_RESOURCES__DECAY_PROPORTIONAL();
+  PERIODIC_RESOURCES__PULSE_PROB = config.PERIODIC_RESOURCES__PULSE_PROB();
   STATIC_RESOURCES__LEVEL = config.STATIC_RESOURCES__LEVEL();
   STATIC_RESOURCES__CONSUME_FIXED = config.STATIC_RESOURCES__CONSUME_FIXED();
   STATIC_RESOURCES__CONSUME_PROPORTIONAL = config.STATIC_RESOURCES__CONSUME_PROPORTIONAL();
@@ -498,8 +542,6 @@ void DOLWorld::SetupEnvironment() {
     }
   }
   std::cout << "Configured " << environments.size() << " environments, each with " << environments.back().resources.size() << " resources." << std::endl;
-
-  // todo - environmental change??
 }
 
 /// Setup the experiment.
@@ -594,6 +636,23 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     org.GetPhenotype().consumption_failures_by_type[resource_id]++;
   };
 
+  if (RESOURCE_DECAY_MODE == "fixed") {
+    fun_decay_resource = [this](size_t env_id, size_t resource_id) {
+      Environment & local_env = environments[env_id];
+      Resource & res_state = local_env.resources[resource_id];
+      res_state.DecayFixed(PERIODIC_RESOURCES__DECAY_FIXED);
+    };
+  } else if (RESOURCE_DECAY_MODE == "proportional") {
+    fun_decay_resource = [this](size_t env_id, size_t resource_id) {
+      Environment & local_env = environments[env_id];
+      Resource & res_state = local_env.resources[resource_id];
+      res_state.DecayProportion(PERIODIC_RESOURCES__DECAY_PROPORTIONAL);
+    };
+  } else {
+    std::cout << "Unrecognized RESOURCE_DECAY_MODE (" << RESOURCE_DECAY_MODE << ")! Exiting." << std::endl;
+    exit(-1);
+  }
+
   // What to do when an organism dies?
   // - deactivate the deme hardware
   OnOrgDeath([this](size_t pos) {
@@ -644,7 +703,10 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
 void DOLWorld::RunStep() {
   std::cout << "Update: " << update << "; NumOrgs: " << GetNumOrgs() << std::endl;
   // Reminder, 1 update = CPU_CYCLES_PER_UPDATE distributed to every CPU thread across all demes
-  // (1) Evaluate all organisms (demes)
+  // () Update the environment
+  std::cout << "ADVANCE ENVIRONMENT" << std::endl;
+  AdvanceEnvironment();
+  // () Evaluate all organisms (demes)
   std::cout << "EXECUTION" << std::endl;
   for (size_t oid = 0; oid < pop.size(); ++oid) {
     if (!IsOccupied(oid)) continue;
@@ -659,7 +721,7 @@ void DOLWorld::RunStep() {
       birth_chamber.emplace_back(oid);
     }
   }
-  // (2) Do reproduction
+  // () Do organism-level (deme-level) reproduction
   emp::Shuffle(*random_ptr, birth_chamber); // Randomize birth chamber priority
   std::cout << "REPRODUCTION?" << std::endl;
   for (size_t oid : birth_chamber) {
