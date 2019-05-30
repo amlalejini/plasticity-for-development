@@ -6,6 +6,7 @@
 #include "DOLWorld.h"
 #include "DOLWorldConfig.h"
 #include "DigitalOrganism.h"
+#include "Resource.h"
 
 // Tests
 // - [ ] Test that phenotypes are property reset on birth/placement!
@@ -215,6 +216,125 @@ TEST_CASE ( "DOLWorld Run - Default Settings", "[world][run]" ) {
   // Run world under default configuration options
   world.Run();
   REQUIRE(world.GetUpdate() == config.UPDATES()+1);
+}
+
+TEST_CASE ( "Resource", "[resource]") {
+  Resource resource;
+
+  resource.SetID(0);
+  resource.SetType(ResourceType::PERIODIC);
+  REQUIRE(resource.GetID() == 0);
+  REQUIRE(resource.GetType() == ResourceType::PERIODIC);
+
+  // set to 0
+  resource.SetAmount(0);
+  REQUIRE(resource.GetAmount() == 0.0);
+  REQUIRE(resource.IsAvailable() == false);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  resource.IncAmount(100);
+  REQUIRE(resource.GetAmount() == 100.0);
+  REQUIRE(resource.IsAvailable());
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  resource.SetAmount(101);
+  REQUIRE(resource.GetAmount() == 101.0);
+  REQUIRE(resource.IsAvailable());
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+  resource.AdvanceAvailabilityTracking();
+  REQUIRE(resource.GetTimeAvailable() == 1);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  resource.SetAmount(0.5*Resource::MIN_RESOURCE_AMOUNT);
+  REQUIRE(resource.GetAmount() == 0.0);
+  REQUIRE(resource.IsAvailable() == false);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+  resource.AdvanceAvailabilityTracking();
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 1);
+
+  resource.IncAmount(100);
+  REQUIRE(resource.GetAmount() == 100.0);
+  REQUIRE(resource.IsAvailable());
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  // Consume
+  double consumed;
+  // - Consume unavailable
+  resource.SetAmount(0);
+  consumed = resource.ConsumeFixed(10);
+  REQUIRE(consumed == 0.0);
+  REQUIRE(resource.GetAmount() == 0.0);
+  REQUIRE(resource.IsAvailable() == false);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  // - Consume available => enough available
+  resource.SetAmount(100);
+  consumed = resource.ConsumeFixed(10);
+  REQUIRE(consumed == 10.0);
+  REQUIRE(resource.GetAmount() == 90.0);
+  REQUIRE(resource.IsAvailable() == true);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  // - Consume available => not enough available
+  consumed = resource.ConsumeFixed(100.0);
+  REQUIRE(consumed == 90.0);
+  REQUIRE(resource.GetAmount() == 0.0);
+  REQUIRE(resource.IsAvailable() == false);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  resource.SetAmount(100);
+  consumed = resource.ConsumeProportion(0.5);
+  REQUIRE(consumed == 50.0);
+  REQUIRE(resource.GetAmount() == 50.0);
+  REQUIRE(resource.IsAvailable() == true);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  // Decay
+  // - decay unavailable
+  resource.SetAmount(0.0);
+  resource.DecayFixed(100);
+  REQUIRE(resource.GetAmount() == 0.0);
+  REQUIRE(resource.IsAvailable() == false);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  resource.DecayProportion(0.5);
+  REQUIRE(resource.GetAmount() == 0.0);
+  REQUIRE(resource.IsAvailable() == false);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  // - decay available => not enough available
+  resource.SetAmount(100);
+  resource.DecayFixed(150);
+  REQUIRE(resource.GetAmount() == 0.0);
+  REQUIRE(resource.IsAvailable() == false);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  // - decay available => enough availble
+  resource.SetAmount(100);
+  resource.DecayProportion(0.5);
+  REQUIRE(resource.GetAmount() == 50.0);
+  REQUIRE(resource.IsAvailable() == true);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
+
+  resource.DecayFixed(20);
+  REQUIRE(resource.GetAmount() == 30);
+  REQUIRE(resource.IsAvailable() == true);
+  REQUIRE(resource.GetTimeAvailable() == 0);
+  REQUIRE(resource.GetTimeUnavailable() == 0);
 }
 
 TEST_CASE ( "Mutator", "[mutator]") {

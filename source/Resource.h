@@ -4,11 +4,10 @@
 enum class ResourceType { STATIC, PERIODIC };
 
 class Resource {
-
+public:
   static constexpr double MIN_RESOURCE_AMOUNT = 0.1;
 
 protected:
-
   size_t resource_id=(size_t)-1; ///< Resource identifier
   ResourceType type=ResourceType::STATIC;
   double amount=0;               ///< How much resource is available?
@@ -16,8 +15,10 @@ protected:
   size_t time_in_state=0;        ///< How long has this resource been in its current state?
 
 public:
-
+  /// Set resource type
   void SetType(ResourceType t) { type = t; }
+
+  /// Set resource ID
   void SetID(size_t id) { resource_id = id; }
 
   /// Reset this resource
@@ -26,10 +27,19 @@ public:
   /// Is this resource available?
   bool IsAvailable() const { return available; }
 
+  /// Get resource type
   ResourceType GetType() const { return type; }
+
+  /// Get resource ID
   size_t GetID() const { return resource_id; }
 
+  /// Get amount of available resource
+  double GetAmount() const { return amount; }
+
+  /// Get the time this resource has been available (0 if unavailable)
   size_t GetTimeAvailable() const { return (available) ? time_in_state : 0; }
+
+  /// Get the time that this resource has been unavailble (0 if available)
   size_t GetTimeUnavailable() const { return (!available) ? time_in_state : 0; }
 
   /// Attempt to consume an amount of this resource
@@ -47,7 +57,7 @@ public:
   void DecayProportion(double prop);
 
   /// Manipulate the amount of resource
-  void SetAmount(double value); /// todo - make this work better!
+  void SetAmount(double value);
 
   /// Increment the amount of resource available
   void IncAmount(double value);
@@ -57,7 +67,7 @@ public:
   void AdvanceAvailabilityTracking();
 };
 
-
+/// Reset this resource
 void Resource::Reset() {
   amount = 0;
   available = false;
@@ -102,6 +112,7 @@ double Resource::ConsumeProportion(double prop) {
   return consumed;
 }
 
+/// Decay a fixed amount of this resource
 void Resource::DecayFixed(double value) {
   if (value > amount) {
     // Decaying more resource than available, decay all.
@@ -119,6 +130,7 @@ void Resource::DecayFixed(double value) {
   }
 }
 
+/// Decay a proportion of this resource
 void Resource::DecayProportion(double prop) {
   amount -= prop*amount;
   if (amount < MIN_RESOURCE_AMOUNT) amount = 0.0;
@@ -129,6 +141,7 @@ void Resource::DecayProportion(double prop) {
   }
 }
 
+/// Manipulate the amount of resource
 void Resource::SetAmount(double value) {
   emp_assert(value >= 0);
   amount = (value < MIN_RESOURCE_AMOUNT) ? 0.0 : value;
@@ -143,6 +156,7 @@ void Resource::SetAmount(double value) {
   }
 }
 
+/// Increment the amount of resource
 void Resource::IncAmount(double value) {
   emp_assert(amount + value >= 0);
   amount += value;
@@ -158,6 +172,8 @@ void Resource::IncAmount(double value) {
   }
 }
 
+/// Advance resource availability tracking by a single time step (i.e., how long
+/// has this resource been available/unavailable?)
 void Resource::AdvanceAvailabilityTracking() {
   time_in_state++;
 }
