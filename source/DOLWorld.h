@@ -29,6 +29,7 @@
 #include "Deme.h"
 #include "Mutator.h"
 #include "Resource.h"
+#include "Utilities.h"
 
 class DOLWorld : public emp::World<DigitalOrganism> {
 public:
@@ -72,6 +73,7 @@ protected:
   // RESOURCES Configuration Settings
   std::string RESOURCE_CONSUMPTION_MODE;
   std::string RESOURCE_DECAY_MODE;
+  std::string RESOURCE_TAGGING_MODE;
   size_t NUM_PERIODIC_RESOURCES;
   double PERIODIC_RESOURCES__LEVEL;
   double PERIODIC_RESOURCES__CONSUME_FIXED;
@@ -122,6 +124,7 @@ protected:
   Mutator mutator;
 
   emp::vector<Environment> environments;  ///< Each organism (and deme) is has a local environment
+  emp::vector<tag_t> resource_tags;
   size_t TOTAL_RESOURCES;
 
   emp::vector<Deme> demes;
@@ -148,10 +151,41 @@ protected:
 
   /// Helper function to set cell sensor
   void SetCellSensor(size_t org_id, size_t cell_id, size_t resource_id, bool value);
+  bool IsCellSensing(size_t org_id, size_t cell_id, size_t resource_id);
+
+  void PulsePeriodicResource(size_t env_id, size_t res_id) {
+    Environment & local_env = environments[env_id];
+    Resource & res = local_env.resources[res_id];
+    // Replinish the pulsing resource!
+    res.SetAmount(PERIODIC_RESOURCES__LEVEL);
+
+    // We only need to alert the organism/deme if this position of the population
+    // is occupied
+    if (!IsOccupied(env_id)) return;
+
+    // Localize the organism and the deme
+    org_t & org = GetOrg(env_id);
+    Deme & deme = GetDeme(env_id);
+
+    // For any cells that are sensing, alert them!
+    for (size_t cell_id = 0; cell_id < deme.GetCellCapacity(); ++cell_id) {
+      // If cell isn't active, we don't need to worry about it
+      if (!deme.IsCellActive(cell_id)) continue;
+      // Cell is active, is it sensing for this resource?
+      if (!deme.IsCellSensingResource(cell_id, res_id)) continue;
+      // Cell is active & sensing for this resource! Alert!
+      // bookmark ====> TODO TODO TODO!!!
+      // - cell_hw.sgp_hw.TriggerEvent(resource_alert, resource_tag)
+      // Track that this organism received a signal for this resource!
+      org.GetPhenotype().resource_alerts_received_by_type[res_id]++;
+    }
+  }
 
   /// Advance the all environment states
   void AdvanceEnvironment() {
     for (size_t env_id = 0; env_id < environments.size(); ++env_id) {
+      // We only need to advance the environment for active organisms!
+      if (!IsOccupied(env_id)) continue;
       Environment & local_env = environments[env_id];
       // Update resources
       for (size_t res_id = 0; res_id < local_env.resources.size(); ++res_id) {
@@ -170,7 +204,8 @@ protected:
           } else {
             // Pulse resource (maybe)!
             if (res.GetTimeUnavailable() >= PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE && random_ptr->P(PERIODIC_RESOURCES__PULSE_PROB)) {
-              res.SetAmount(PERIODIC_RESOURCES__LEVEL);
+              // res.SetAmount(PERIODIC_RESOURCES__LEVEL);
+              PulsePeriodicResource(env_id, res_id);
             }
           }
         }
@@ -215,6 +250,8 @@ public:
   void RunStep();
   void Run();
 
+  void PrintResourceTags(std::ostream & os = std::cout);
+
 };
 
 // =============================================================================
@@ -246,7 +283,13 @@ void DOLWorld::AttemptToMetabolize(size_t org_id, size_t cell_id, size_t resourc
 void DOLWorld::SetCellSensor(size_t org_id, size_t cell_id, size_t resource_id, bool value) {
   Deme & deme = GetDeme(org_id);
   Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
-  cell_hw.resource_sensors[resource_id] = value;
+  cell_hw.SetResourceSenor(resource_id, value);
+}
+
+bool DOLWorld::IsCellSensing(size_t org_id, size_t cell_id, size_t resource_id) {
+  Deme & deme = GetDeme(org_id);
+  Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
+  return cell_hw.IsSensingResource(resource_id);
 }
 
 /// Localize configuration settings.
@@ -262,6 +305,7 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   NUM_STATIC_RESOURCES = config.NUM_STATIC_RESOURCES();
   RESOURCE_CONSUMPTION_MODE = config.RESOURCE_CONSUMPTION_MODE();
   RESOURCE_DECAY_MODE = config.RESOURCE_DECAY_MODE();
+  RESOURCE_TAGGING_MODE = config.RESOURCE_TAGGING_MODE();
   PERIODIC_RESOURCES__LEVEL = config.PERIODIC_RESOURCES__LEVEL();
   PERIODIC_RESOURCES__CONSUME_FIXED = config.PERIODIC_RESOURCES__CONSUME_FIXED();
   PERIODIC_RESOURCES__CONSUME_PROPORTIONAL = config.PERIODIC_RESOURCES__CONSUME_PROPORTIONAL();
@@ -418,6 +462,16 @@ void DOLWorld::SetupInstructionSet() {
         const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
         this->SetCellSensor(world_id, cell_id, resource_id, false);
       }, 0, "Deactivate sensor for resource " + emp::to_string(resource_id));
+
+      // - Add sensor toggle instruction for each resource
+      inst_lib->AddInst("ToggleSensor-" + emp::to_string(resource_id),
+        [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+          // Need to get world ID and cell ID
+          const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+          const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+          const bool sensor_state = this->IsCellSensing(world_id, cell_id, resource_id);
+          this->SetCellSensor(world_id, cell_id, resource_id, !sensor_state);
+        }, 0, "Toggle sensor for resource " + emp::to_string(resource_id));
   }
 }
 
@@ -449,6 +503,26 @@ void DOLWorld::SetupEnvironment() {
     }
   }
   std::cout << "Configured " << environments.size() << " environments, each with " << environments.back().resources.size() << " resources." << std::endl;
+
+  // Configure resource tags!
+  if (RESOURCE_TAGGING_MODE == "random") {
+    /*emp::Random & rnd, size_t count, bool guarantee_unique*/
+    resource_tags = GenRandTags<DOLWorldConstants::TAG_WIDTH>(*random_ptr, TOTAL_RESOURCES, true);
+  } else if (RESOURCE_TAGGING_MODE == "hadamard") {
+    emp_assert(DOLWorldConstants::TAG_WIDTH >= TOTAL_RESOURCES, "TAG_WIDTH (", DOLWorldConstants::TAG_WIDTH, ") must be >= TOTAL_RESOURCES (", TOTAL_RESOURCES, ") when RESOURCE_TAGGING_MODE=hadamard");
+    resource_tags = GenHadamardMatrix<DOLWorldConstants::TAG_WIDTH>();
+    resource_tags.resize(TOTAL_RESOURCES);
+  } else {
+    std::cout << "Unrecognized RESOURCE_TAGGING_MODE (" << RESOURCE_TAGGING_MODE << "). Exiting." << std::endl;
+    exit(-1);
+  }
+  emp_assert(resource_tags.size() == TOTAL_RESOURCES);
+  // Print resource tags!
+  std::cout << "Resource tags: ";
+  PrintResourceTags();
+  std::cout << std::endl;
+
+  // todo - output a resource tag file
 }
 
 /// Setup the experiment.
@@ -655,6 +729,15 @@ void DOLWorld::Run() {
     RunStep();
   }
   // Todo - end of run snapshotting/analyses!
+}
+
+void DOLWorld::PrintResourceTags(std::ostream & os /*= std::cout*/) {
+  os << "[";
+  for (size_t res_id = 0; res_id < resource_tags.size(); ++res_id) {
+    if (res_id) os << ",";
+    resource_tags[res_id].Print(os);
+  }
+  os << "]";
 }
 
 #endif

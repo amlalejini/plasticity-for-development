@@ -49,7 +49,7 @@ public:
 
     // - sensors: emp::vector<size_t> sensors;
     emp::vector<bool> resource_sensors;         ///< One sensor per resource
-    emp::vector<bool> metabolized_on_advance;    ///< Which resources is cell attempting to metabolize?
+    emp::vector<bool> metabolized_on_advance;   ///< Which resources is cell attempting to metabolize?
 
     CellularHardware(emp::Ptr<emp::Random> _rnd, emp::Ptr<inst_lib_t> _inst_lib,
                      emp::Ptr<event_lib_t> _event_lib)
@@ -79,6 +79,14 @@ public:
 
     void AdvanceStep() {
       sgp_hw.SingleProcess();
+    }
+
+    bool IsSensingResource(size_t res_id) const {
+      return resource_sensors[res_id];
+    }
+
+    void SetResourceSenor(size_t sensor_id, bool on) {
+      resource_sensors[sensor_id] = on;
     }
   };
 
@@ -138,6 +146,12 @@ public:
 
   /// Get const cell at position ID (outsource bounds checking to emp::vector)
   const CellularHardware & GetCell(size_t id) const { return cells[id]; }
+
+  /// Is cell @ ID active?
+  bool IsCellActive(size_t id) const { return cells[id].active; }
+
+  /// Is cell @ ID sensing the specified resource?
+  bool IsCellSensingResource(size_t id, size_t res_id) const { return cells[id].IsSensingResource(res_id); }
 
   /// Given a cell ID and facing (of that cell), return the appropriate neighboring cell ID
   size_t GetNeighboringCellID(size_t id, Facing dir) const { return neighbor_lookup[id*NUM_DIRECTIONS + (size_t)dir]; }

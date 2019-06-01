@@ -21,6 +21,7 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   GROUP(RESOURCES, "Resource Settings"),
   VALUE(RESOURCE_CONSUMPTION_MODE, std::string, "fixed", "How are resources consumed? Options:\n\t(1) 'fixed'\n\t(2) 'proportional'"),
   VALUE(RESOURCE_DECAY_MODE, std::string, "fixed", "How do resources decay? Options:\n\t(1) 'fixed'\n\t(2) 'proportional'"),
+  VALUE(RESOURCE_TAGGING_MODE, std::string, "random", "How should resources be tagged? Options:\n\t(1) 'random': tags are generated randomly (each is guaranteed to be unique)\n\t(2) 'hadamard' (num resources <= num bits)"),
 
   VALUE(NUM_PERIODIC_RESOURCES, size_t, 4, "How many simple tasks should there be?"),
   VALUE(PERIODIC_RESOURCES__LEVEL, double, 100.0, "How much of a periodic resource is made available on pulse?"),

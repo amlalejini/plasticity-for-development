@@ -41,6 +41,7 @@ public:
     emp::vector<double> consumption_amount_by_type;
     emp::vector<size_t> consumption_successes_by_type;
     emp::vector<size_t> consumption_failures_by_type;
+    emp::vector<size_t> resource_alerts_received_by_type;
 
     /// Reset this organism's phenotype
     void Reset(size_t num_resources) {
@@ -52,6 +53,8 @@ public:
       consumption_successes_by_type.resize(num_resources, 0);
       consumption_failures_by_type.clear();
       consumption_failures_by_type.resize(num_resources, 0);
+      resource_alerts_received_by_type.clear();
+      resource_alerts_received_by_type.resize(num_resources, 0);
       age=0;
     }
   };
