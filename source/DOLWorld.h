@@ -174,7 +174,7 @@ protected:
       // Cell is active, is it sensing for this resource?
       if (!deme.IsCellSensingResource(cell_id, res_id)) continue;
       // Cell is active & sensing for this resource! Alert!
-      // bookmark ====> TODO TODO TODO!!!
+      deme.GetCell(cell_id).sgp_hw.SpawnCore(resource_tags[res_id], SGP_MIN_TAG_MATCH_THRESHOLD);
       // - cell_hw.sgp_hw.TriggerEvent(resource_alert, resource_tag)
       // Track that this organism received a signal for this resource!
       org.GetPhenotype().resource_alerts_received_by_type[res_id]++;
