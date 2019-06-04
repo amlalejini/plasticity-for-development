@@ -37,7 +37,10 @@ public:
   struct Phenotype {
     size_t age=0;                     ///< How many updates has this organism been alive?
     bool trigger_repro=false;         ///< Trigger reproduction?
-    double resources_collected=0.0;   ///< How many resources has this organism collected?
+    double resource_pool=0.0;               ///< How many resources are currently in this organism's resource pool?
+    double total_resources_collected=0.0;   ///< How many resources has this organism collected in total across all cells?
+    double total_resources_donated=0.0;     ///< How many resources have individual cells donated to the deme-level organism?
+    size_t offspring_cnt=0;
     emp::vector<double> consumption_amount_by_type;
     emp::vector<size_t> consumption_successes_by_type;
     emp::vector<size_t> consumption_failures_by_type;
@@ -46,7 +49,9 @@ public:
     /// Reset this organism's phenotype
     void Reset(size_t num_resources) {
       trigger_repro=false;
-      resources_collected=0.0;
+      resource_pool=0.0;
+      total_resources_collected=0.0;
+      total_resources_donated=0.0;
       consumption_amount_by_type.clear();
       consumption_amount_by_type.resize(num_resources, 0.0);
       consumption_successes_by_type.clear();
@@ -56,6 +61,7 @@ public:
       resource_alerts_received_by_type.clear();
       resource_alerts_received_by_type.resize(num_resources, 0);
       age=0;
+      offspring_cnt=0;
     }
   };
 

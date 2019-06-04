@@ -50,6 +50,7 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(SGP_MAX_THREAD_CNT, size_t, 4, "What is the maximum number of concurrently running threads allowed on a SignalGP CPU?"),
   VALUE(SGP_MAX_CALL_DEPTH, size_t, 128 , "What is the maximum call stack depth allowed on a SignalGP CPU?"),
   VALUE(SGP_MIN_TAG_MATCH_THRESHOLD, double, 0.0, "What is the tag matching threshold required for successful tag-based references on a SignalGP CPU?"),
+  VALUE(CELL_SENSOR_LOCK_IN, bool, true, "Once activated, can a cell 'turn off' a sensor?"),
 
   GROUP(PROGRAM, "SignalGP Program Settings"),
   VALUE(MIN_FUNCTION_CNT, size_t, 1, "Minimum allowed number of functions in a SignalGP program."),
@@ -69,6 +70,11 @@ EMP_BUILD_CONFIG( DOLWorldConfig,
   VALUE(PROGRAM_FUNC_DEL__PER_FUN, double, 0.05, "Program whole-function deletion rate (per-function)"),
   VALUE(PROGRAM_TAG_BIT_FLIP__PER_BIT, double, 0.0025, "Program tags bit flip rate (per-bit)"),
   VALUE(BIRTH_TAG_BIT_FLIP__PER_BIT, double, 0.0025, "Birth tag bit flip rate (per-bit)"),
+
+  GROUP(REPRODUCTION, "Organism Reproduction Settings"),
+  VALUE(DEME_REPRODUCTION_COST, double, 100.0, "How many resources does it cost for an organism (deme) to reproduce? I.e., propagule cost?"),
+  VALUE(TISSUE_ACCRETION_COST, double, 10.0, "How many resources does it cost for a cell to reproduce (within-deme)? I.e., soma production cost?"),
+
 
 )
 

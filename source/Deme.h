@@ -50,6 +50,7 @@ public:
     // - sensors: emp::vector<size_t> sensors;
     emp::vector<bool> resource_sensors;         ///< One sensor per resource
     emp::vector<bool> metabolized_on_advance;   ///< Which resources is cell attempting to metabolize?
+    double local_resources=0.0;                 ///< Reservoir of resources local to this cell
 
     CellularHardware(emp::Ptr<emp::Random> _rnd, emp::Ptr<inst_lib_t> _inst_lib,
                      emp::Ptr<event_lib_t> _event_lib)
