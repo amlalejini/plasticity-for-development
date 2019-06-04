@@ -48,10 +48,12 @@ public:
 
     /// Reset this organism's phenotype
     void Reset(size_t num_resources) {
+      age=0;
       trigger_repro=false;
       resource_pool=0.0;
       total_resources_collected=0.0;
       total_resources_donated=0.0;
+      offspring_cnt=0;
       consumption_amount_by_type.clear();
       consumption_amount_by_type.resize(num_resources, 0.0);
       consumption_successes_by_type.clear();
@@ -60,8 +62,6 @@ public:
       consumption_failures_by_type.resize(num_resources, 0);
       resource_alerts_received_by_type.clear();
       resource_alerts_received_by_type.resize(num_resources, 0);
-      age=0;
-      offspring_cnt=0;
     }
   };
 

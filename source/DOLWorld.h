@@ -756,7 +756,7 @@ void DOLWorld::RunStep() {
     org_t & org = GetOrg(oid);
     if (org.GetPhenotype().trigger_repro) {
       // Birth!
-      std::cout << "Org " << oid << " giving birth!" << std::endl;
+      // std::cout << "Org " << oid << " giving birth!" << std::endl;
       DoBirth(org.GetGenome(), oid);
       org.GetPhenotype().trigger_repro = false;
       org.GetPhenotype().offspring_cnt++;
@@ -774,6 +774,7 @@ void DOLWorld::Run() {
     RunStep();
   }
   // Todo - end of run snapshotting/analyses!
+  std::cout << "Done running!" << std::endl;
 }
 
 void DOLWorld::PrintResourceTags(std::ostream & os /*= std::cout*/) {

@@ -14,9 +14,11 @@
 
 int main(int argc, char* argv[])
 {
+  std::string config_fname = "DOLWorldConfig.cfg";
   DOLWorldConfig config;
   auto args = emp::cl::ArgManager(argc, argv);
-  if (args.ProcessConfigOptions(config, std::cout, "DOLWorldConfig.cfg", "Memic-macros.h") == false) exit(0);
+  config.Read(config_fname);
+  if (args.ProcessConfigOptions(config, std::cout, "DOLWorldConfig.cfg", "DOLWorld-macros.h") == false) exit(0);
   if (args.TestUnknown() == false) exit(0);  // If there are leftover args, throw an error.
   // Write to screen how the experiment is configured
   std::cout << "==============================" << std::endl;
