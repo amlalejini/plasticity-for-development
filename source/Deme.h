@@ -83,10 +83,12 @@ public:
     }
 
     bool IsSensingResource(size_t res_id) const {
+      emp_assert(res_id < resource_sensors.size());
       return resource_sensors[res_id];
     }
 
-    void SetResourceSenor(size_t sensor_id, bool on) {
+    void SetResourceSensor(size_t sensor_id, bool on) {
+      emp_assert(sensor_id < resource_sensors.size());
       resource_sensors[sensor_id] = on;
     }
   };
@@ -116,6 +118,7 @@ public:
       cells.emplace_back(_rnd, _inst_lib, _event_lib);
       cells.back().cell_id = i; // Cell id corresponds to position in cells vector
       cells.back().sgp_hw.SetTrait(CellularHardware::SGPTraitIDs::TRAIT_ID__CELL_ID, i);
+      cells.back().sgp_hw.SetTrait(CellularHardware::SGPTraitIDs::TRAIT_ID__DEME_ID, deme_id);
       cell_schedule.emplace_back(i);
     }
     BuildNeighborLookup();

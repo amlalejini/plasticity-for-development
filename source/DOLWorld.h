@@ -188,6 +188,7 @@ protected:
       // Cell is active, is it sensing for this resource?
       if (!deme.IsCellSensingResource(cell_id, res_id)) continue;
       // Cell is active & sensing for this resource! Alert!
+      std::cout << "Spawning core on cell!" << std::endl;
       deme.GetCell(cell_id).sgp_hw.SpawnCore(resource_tags[res_id], SGP_MIN_TAG_MATCH_THRESHOLD);
       // - cell_hw.sgp_hw.TriggerEvent(resource_alert, resource_tag)
       // Track that this organism received a signal for this resource!
@@ -297,7 +298,7 @@ void DOLWorld::AttemptToMetabolize(size_t org_id, size_t cell_id, size_t resourc
 void DOLWorld::SetCellSensor(size_t org_id, size_t cell_id, size_t resource_id, bool value) {
   Deme & deme = GetDeme(org_id);
   Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
-  cell_hw.SetResourceSenor(resource_id, value);
+  cell_hw.SetResourceSensor(resource_id, value);
 }
 
 bool DOLWorld::IsCellSensing(size_t org_id, size_t cell_id, size_t resource_id) {
@@ -389,6 +390,8 @@ void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
   emp_assert(INIT_POP_SIZE <= MAX_POP_SIZE, "INIT_POP_SIZE (", INIT_POP_SIZE, ") cannot exceed MAX_POP_SIZE (", MAX_POP_SIZE, ")!");
   for (size_t i = 0; i < INIT_POP_SIZE; ++i) {
     InjectAt(GenRandDigitalOrganismGenome(*random_ptr, *inst_lib, config), i);
+    // std::cout << "Inst lib size: " << GetOrg(i).GetGenome().program.GetInstLib()->GetSize() << std::endl;
+    // std::cout << "  expected size: " << inst_lib->GetSize() << std::endl;
   }
   // WARNING: All initial organisms in the population will have independent ancestry.
   //          - We could do a little extra work to tie their ancestry together (e.g.,
@@ -513,7 +516,7 @@ void DOLWorld::SetupEnvironment() {
     // std::cout << "Configuring env " << env_id << std::endl;
     Environment & env = environments[env_id]; // Configure environment @ env_id
     env.env_id = env_id;
-    env.resources.resize(NUM_STATIC_RESOURCES + NUM_PERIODIC_RESOURCES);
+    env.resources.resize(TOTAL_RESOURCES);
     size_t taskID = 0; // Each resource is associated with a 'task'
     // How many static resources?
     while (taskID < NUM_STATIC_RESOURCES) {
@@ -531,6 +534,7 @@ void DOLWorld::SetupEnvironment() {
       env.resources[taskID].Reset();
       ++taskID;
     }
+    emp_assert(env.resources.size() == TOTAL_RESOURCES);
   }
   std::cout << "Configured " << environments.size() << " environments, each with " << environments.back().resources.size() << " resources." << std::endl;
 
@@ -607,6 +611,8 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
       cell.local_resources += collected;
       org.GetPhenotype().total_resources_collected += collected;
       // Track consumption info
+      emp_assert(resource_id < org.GetPhenotype().consumption_amount_by_type.size());
+      emp_assert(resource_id < org.GetPhenotype().consumption_successes_by_type.size());
       org.GetPhenotype().consumption_amount_by_type[resource_id] += collected;
       org.GetPhenotype().consumption_successes_by_type[resource_id] += 1;
     };
@@ -623,6 +629,8 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
       cell.local_resources += collected;
       org.GetPhenotype().total_resources_collected += collected;
       // Track consumption info
+      emp_assert(resource_id < org.GetPhenotype().consumption_amount_by_type.size());
+      emp_assert(resource_id < org.GetPhenotype().consumption_successes_by_type.size());
       org.GetPhenotype().consumption_amount_by_type[resource_id] += collected;
       org.GetPhenotype().consumption_successes_by_type[resource_id] += 1;
     };
@@ -677,12 +685,15 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   // - deactivate the deme hardware
   OnOrgDeath([this](size_t pos) {
     // Clean up deme hardware @ position
+    emp_assert(pos < demes.size());
     demes[pos].DeactivateDeme();
   });
 
   // What happens when a new organism is placed?
   OnPlacement([this](size_t pos) {
     // Load organism into deme hardware
+    emp_assert(pos < demes.size());
+    emp_assert(pos < environments.size());
     Deme & focal_deme = demes[pos];
     org_t & placed_org = GetOrg(pos);
     placed_org.SetOrgID(pos);
@@ -730,6 +741,7 @@ void DOLWorld::RunStep() {
     if (!IsOccupied(oid)) continue;
     // Distribute CPU cycles to DEME
     Deme & deme = demes[oid];
+    emp_assert(deme.IsActive());
     deme.Advance(CPU_CYCLES_PER_UPDATE);
     org_t & org = GetOrg(oid);
     // This organism lived through yet another trying update...
@@ -740,6 +752,10 @@ void DOLWorld::RunStep() {
       org.GetPhenotype().resource_pool -= DEME_REPRODUCTION_COST;
       org.GetPhenotype().trigger_repro = true;
     }
+    // if (org.GetPhenotype().age >= 20) {
+    //   org.GetPhenotype().trigger_repro = true;
+    //   org.GetPhenotype().age = 0;
+    // }
     // Did organism trigger reproduction?
     if (org.GetPhenotype().trigger_repro) {
       birth_chamber.emplace_back(oid);
@@ -757,14 +773,16 @@ void DOLWorld::RunStep() {
     if (org.GetPhenotype().trigger_repro) {
       // Birth!
       // std::cout << "Org " << oid << " giving birth!" << std::endl;
-      DoBirth(org.GetGenome(), oid);
       org.GetPhenotype().trigger_repro = false;
       org.GetPhenotype().offspring_cnt++;
+      DoBirth(org.GetGenome(), oid);
+      // WARNING (to future me): org could be an invalid reference now!!!!
       // todo - OnBirth! and OnOffspringReady
     }
   }
   // Empty the birth chamber
   birth_chamber.clear();
+  // birth_chamber.resize(0);
   // For each organism in the population, run its deme forward!
   Update(); // Update!
 }

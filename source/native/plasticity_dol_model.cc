@@ -10,6 +10,9 @@
 #include "../DOLWorld.h"
 #include "../DOLWorldConfig.h"
 
+#include <unordered_map>
+#include "tools/map_utils.h"
+
 // This is the main function for the NATIVE version of example.
 
 int main(int argc, char* argv[])
