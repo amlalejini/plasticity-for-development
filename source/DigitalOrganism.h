@@ -114,4 +114,29 @@ typename DigitalOrganism::Genome GenRandDigitalOrganismGenome(
           emp::GenRandSignalGPTag<DOLWorldConstants::TAG_WIDTH>(rnd)};
 }
 
+/// Given a DOLWorldConfig and a DigitalOrganism genome, validate genome against
+/// configuration settings.
+bool ValidateDigitalOrganismGenome(const DOLWorldConfig & config,
+                                   const typename DigitalOrganism::Genome & genome) {
+  using hardware_t = typename DigitalOrganism::sgp_hardware_t;
+  using program_t = typename DigitalOrganism::program_t;
+  const program_t & prog = genome.program;
+  // Validate program.
+  const size_t max_total_len = config.MAX_FUNCTION_CNT() * config.MAX_FUNCTION_LEN();
+  if (prog.GetInstCnt() > max_total_len) return false;
+  if (prog.GetSize() < config.MIN_FUNCTION_CNT()) return false;
+  if (prog.GetSize() > config.MAX_FUNCTION_CNT()) return false;
+  for (size_t fID = 0; fID < prog.GetSize(); ++fID) {
+    if (prog[fID].GetSize() < config.MIN_FUNCTION_LEN()) return false;
+    if (prog[fID].GetSize() > config.MAX_FUNCTION_LEN()) return false;
+    for (size_t iID = 0; iID < prog[fID].GetSize(); ++iID) {
+      for (size_t k = 0; k < hardware_t::MAX_INST_ARGS; ++k) {
+        if (prog[fID][iID].args[k] < config.MIN_ARGUMENT_VAL()) return false;
+        if (prog[fID][iID].args[k] > config.MAX_ARGUMENT_VAL()) return false;
+      }
+    }
+  }
+  return true;
+}
+
 #endif

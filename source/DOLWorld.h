@@ -70,6 +70,7 @@ protected:
   size_t INIT_POP_SIZE;
   size_t MAX_POP_SIZE;
   std::string INIT_POP_MODE;
+  std::string LOAD_ANCESTOR_INDIV_FPATH;
   // RESOURCES Configuration Settings
   std::string RESOURCE_CONSUMPTION_MODE;
   std::string RESOURCE_DECAY_MODE;
@@ -143,7 +144,7 @@ protected:
   void InitConfigs(DOLWorldConfig & config);
   void InitPop(DOLWorldConfig & config);
   void InitPop_Random(DOLWorldConfig & config);
-  void InitPop_Load(DOLWorldConfig & config);
+  void InitPop_LoadIndividual(DOLWorldConfig & config);
 
   void SetupDemeHardware();
   void SetupInstructionSet();
@@ -315,6 +316,7 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
   INIT_POP_SIZE = config.INIT_POP_SIZE();
   MAX_POP_SIZE = config.MAX_POP_SIZE();
   INIT_POP_MODE = config.INIT_POP_MODE();
+  LOAD_ANCESTOR_INDIV_FPATH = config.LOAD_ANCESTOR_INDIV_FPATH();
   // RESOURCES Configuration Settings
   NUM_PERIODIC_RESOURCES = config.NUM_PERIODIC_RESOURCES();
   NUM_STATIC_RESOURCES = config.NUM_STATIC_RESOURCES();
@@ -371,9 +373,13 @@ void DOLWorld::InitConfigs(DOLWorldConfig & config) {
 
 /// Initialize the population
 void DOLWorld::InitPop(DOLWorldConfig & config) {
+  // Make space!
+  pop.resize(MAX_POP_SIZE);
   // How should we initialize the population?
   if (INIT_POP_MODE == "random") {
     InitPop_Random(config);
+  } else if (INIT_POP_MODE == "load-single") {
+    InitPop_LoadIndividual(config);
   } else {
     emp_assert(false, "Invalid INIT_POP_MODE (", INIT_POP_MODE, "). Exiting.");
     exit(-1);
@@ -382,8 +388,6 @@ void DOLWorld::InitPop(DOLWorldConfig & config) {
 
 /// Initialize the population with random digital organisms
 void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
-  // Make space!
-  pop.resize(MAX_POP_SIZE);
   // Now, there's space for MAX_POP_SIZE orgs, but no orgs have been injected
   // - Note, there's no population structure here (at the deme level), so
   //   we're just going to fill things up from beginning to end.
@@ -396,6 +400,65 @@ void DOLWorld::InitPop_Random(DOLWorldConfig & config) {
   // WARNING: All initial organisms in the population will have independent ancestry.
   //          - We could do a little extra work to tie their ancestry together (e.g.,
   //            have a dummy common ancestor).
+}
+
+/// Initialize the population with individual loaded from single-ancestor file
+void DOLWorld::InitPop_LoadIndividual(DOLWorldConfig & config) {
+  std::cout << "Initializing population from single-ancestor file!" << std::endl;
+
+  // Configure the ancestor program.
+  sgp_program_t ancestor_prog(inst_lib);
+  tag_t birth_tag;
+  std::ifstream ancestor_fstream(LOAD_ANCESTOR_INDIV_FPATH);
+  if (!ancestor_fstream.is_open()) {
+    std::cout << "Failed to open ancestor program file(" << LOAD_ANCESTOR_INDIV_FPATH << "). Exiting..." << std::endl;
+    exit(-1);
+  }
+
+  // Get the birth(day) tag!
+  std::string cur_line;
+  while (!ancestor_fstream.eof()) {
+    std::getline(ancestor_fstream, cur_line);
+    emp::remove_whitespace(cur_line);
+    if (cur_line == emp::empty_string()) continue;
+    // Are we looking at the BIRTH tag?
+    std::string birth_prefix = emp::to_lower(emp::string_get_range(cur_line, 0, 5));
+    if (birth_prefix == "birth") {
+      size_t tag_begin = cur_line.find_first_of('[');
+      size_t tag_end = cur_line.find_first_of(']');
+      if ((tag_begin != std::string::npos) && (tag_end != std::string::npos) && (tag_begin < tag_end)) {
+        // Found tag.
+        std::string tag_str = emp::string_get_range(cur_line, tag_begin+1, tag_end-(tag_begin+1));
+        for (size_t i = 0; i < tag_str.size(); ++i) {
+          if (i >= birth_tag.GetSize()) break;
+          if (tag_str[i] == '1') birth_tag.Set(birth_tag.GetSize() - i - 1, true);
+        }
+      }
+      break;
+    } else {
+      std::cout << "FAILED TO FIND BIRTH TAG! EXITING" << std::endl;
+      exit(-1);
+    }
+  }
+  // Here's the birth tag:
+  std::cout << " --- Ancestor birth tag: ---" << std::endl;
+  birth_tag.Print();
+  std::cout << std::endl;
+
+  // Load the ancestor program
+  ancestor_prog.Load(ancestor_fstream);
+  std::cout << " --- Ancestor program: ---" << std::endl;
+  ancestor_prog.PrintProgramFull();
+  std::cout << " -------------------------" << std::endl;
+
+  DigitalOrganism::Genome ancestor_genome(ancestor_prog, birth_tag);
+  emp_assert(ValidateDigitalOrganismGenome(config, ancestor_genome), "Loaded ancestor does not comply with configured requirements.");
+  // todo - tie ancestry together!
+
+  emp_assert(INIT_POP_SIZE <= MAX_POP_SIZE, "INIT_POP_SIZE (", INIT_POP_SIZE, ") cannot exceed MAX_POP_SIZE (", MAX_POP_SIZE, ")!");
+  for (size_t i = 0; i < INIT_POP_SIZE; ++i) {
+    InjectAt(ancestor_genome, i);
+  }
 }
 
 /// Setup the Deme Hardware (only called by DOLWorld::Setup)
@@ -772,7 +835,6 @@ void DOLWorld::RunStep() {
     org_t & org = GetOrg(oid);
     if (org.GetPhenotype().trigger_repro) {
       // Birth!
-      // std::cout << "Org " << oid << " giving birth!" << std::endl;
       org.GetPhenotype().trigger_repro = false;
       org.GetPhenotype().offspring_cnt++;
       DoBirth(org.GetGenome(), oid);
