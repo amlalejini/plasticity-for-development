@@ -6,13 +6,51 @@
 
 #include "web/web.h"
 
+#include "../DOLWorld.h"
+#include "../DOLWorldConfig.h"
+
 namespace UI = emp::web;
 
-UI::Document doc("emp_base");
+// todo - allow config params to be modified
 
-int main()
-{
-  doc << "<h1>Hello, browser!</h1>";
-  std::cout << "Hello, console!" << std::endl;
+// reminder: source ~/gen_ws/emsdk/emsdk_env.sh
+
+class DOLWorldWebInterface : public UI::Animate, public DOLWorld {
+public:
+protected:
+  DOLWorldConfig config;
+
+  UI::Document world_view;
+  UI::Document stats_view;
+  UI::Document dashboard;
+
+public:
+  DOLWorldWebInterface()
+    : world_view("world-view"), stats_view("stats-view"), dashboard("dashboard")
+  {
+    std::cout << "DOLWorldInterface Constructor" << std::endl;
+    SetupInterface();
+  }
+
+  void SetupInterface() {
+    std::cout << "SetupInterface" << std::endl;
+    // Configure random number seed
+    GetRandom().ResetSeed(config.SEED());
+    // todo - allow configuration to be changed
+    // Setup the world based on default config
+    Setup(config);
+
+    // Attach
+  }
+
+  void DoFrame() {
+    std::cout << "DoFrame" << std::endl;
+  }
+
+};
+
+DOLWorldWebInterface interface;
+
+int main() {
 
 }
