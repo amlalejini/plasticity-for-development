@@ -2,3 +2,4 @@
 ignore:
   - "tests/unit_tests.cc"
   - "tests/catch.hpp"
+  - "source/config_web_interface.h"
