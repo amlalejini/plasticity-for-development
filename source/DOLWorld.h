@@ -129,6 +129,7 @@ protected:
 
   emp::vector<Environment> environments;  ///< Each organism (and deme) is has a local environment
   emp::vector<tag_t> resource_tags;
+  emp::vector<ResourceType> resource_types;
   size_t TOTAL_RESOURCES;
 
   emp::vector<Deme> demes;
@@ -189,7 +190,7 @@ protected:
       // Cell is active, is it sensing for this resource?
       if (!deme.IsCellSensingResource(cell_id, res_id)) continue;
       // Cell is active & sensing for this resource! Alert!
-      std::cout << "Spawning core on cell!" << std::endl;
+      // std::cout << "Spawning core on cell!" << std::endl;
       deme.GetCell(cell_id).sgp_hw.SpawnCore(resource_tags[res_id], SGP_MIN_TAG_MATCH_THRESHOLD);
       // - cell_hw.sgp_hw.TriggerEvent(resource_alert, resource_tag)
       // Track that this organism received a signal for this resource!
@@ -539,34 +540,37 @@ void DOLWorld::SetupInstructionSet() {
       }, 0, "Attempt to metabolize resource " + emp::to_string(resource_id));
 
     // - Add sensor activation instruction for each resource
-    inst_lib->AddInst("ActivateSensor-" + emp::to_string(resource_id),
-      [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
-        // Need to get world ID and cell ID
-        const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
-        const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
-        this->SetCellSensor(world_id, cell_id, resource_id, true);
-      }, 0, "Activate sensor for resource " + emp::to_string(resource_id));
+    if (resource_types[resource_id] == ResourceType::PERIODIC) {
 
-    // Are cells allowed to deactivate previously activated sensors?
-    if (!CELL_SENSOR_LOCK_IN) {
-      // - Add sensor deactivation instruction for each resource
-      inst_lib->AddInst("DeactivateSensor-" + emp::to_string(resource_id),
+      inst_lib->AddInst("ActivateSensor-" + emp::to_string(resource_id),
         [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
           // Need to get world ID and cell ID
           const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
           const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
-          this->SetCellSensor(world_id, cell_id, resource_id, false);
-        }, 0, "Deactivate sensor for resource " + emp::to_string(resource_id));
+          this->SetCellSensor(world_id, cell_id, resource_id, true);
+        }, 0, "Activate sensor for resource " + emp::to_string(resource_id));
 
-      // - Add sensor toggle instruction for each resource
-      inst_lib->AddInst("ToggleSensor-" + emp::to_string(resource_id),
-        [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
-          // Need to get world ID and cell ID
-          const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
-          const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
-          const bool sensor_state = this->IsCellSensing(world_id, cell_id, resource_id);
-          this->SetCellSensor(world_id, cell_id, resource_id, !sensor_state);
-        }, 0, "Toggle sensor for resource " + emp::to_string(resource_id));
+      // Are cells allowed to deactivate previously activated sensors?
+      if (!CELL_SENSOR_LOCK_IN) {
+        // - Add sensor deactivation instruction for each resource
+        inst_lib->AddInst("DeactivateSensor-" + emp::to_string(resource_id),
+          [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+            // Need to get world ID and cell ID
+            const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+            const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+            this->SetCellSensor(world_id, cell_id, resource_id, false);
+          }, 0, "Deactivate sensor for resource " + emp::to_string(resource_id));
+
+        // - Add sensor toggle instruction for each resource
+        inst_lib->AddInst("ToggleSensor-" + emp::to_string(resource_id),
+          [this, resource_id](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+            // Need to get world ID and cell ID
+            const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+            const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+            const bool sensor_state = this->IsCellSensing(world_id, cell_id, resource_id);
+            this->SetCellSensor(world_id, cell_id, resource_id, !sensor_state);
+          }, 0, "Toggle sensor for resource " + emp::to_string(resource_id));
+      }
     }
   }
 }
@@ -614,6 +618,21 @@ void DOLWorld::SetupEnvironment() {
     exit(-1);
   }
   emp_assert(resource_tags.size() == TOTAL_RESOURCES);
+
+  // Configure resource types
+  resource_types.resize(TOTAL_RESOURCES);
+  size_t taskID = 0; // Each resource is associated with a 'task'
+  // How many static resources?
+  while (taskID < NUM_STATIC_RESOURCES) {
+    resource_types[taskID] = ResourceType::STATIC;
+    ++taskID;
+  }
+  // How many periodic resources?
+  while (taskID < NUM_STATIC_RESOURCES + NUM_PERIODIC_RESOURCES) {
+    resource_types[taskID] = ResourceType::PERIODIC;
+    ++taskID;
+  }
+
   // Print resource tags!
   std::cout << "Resource tags: ";
   PrintResourceTags();
@@ -638,12 +657,12 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   event_lib = emp::NewPtr<event_lib_t>();
 
   // todo - setup setup signalgp instruction/event libraries
+  // Setup the environment
+  SetupEnvironment();
   // Setup instruction set
   SetupInstructionSet();
   // Setup deme hardware
   SetupDemeHardware();
-  // Setup the environment
-  SetupEnvironment();
 
   // Tell the emp::World how to be
   SetPopStruct_Mixed(false);  // Mixed population (at deme/organism-level), asynchronous generations
@@ -796,10 +815,10 @@ void DOLWorld::RunStep() {
   std::cout << "Update: " << update << "; NumOrgs: " << GetNumOrgs() << std::endl;
   // Reminder, 1 update = CPU_CYCLES_PER_UPDATE distributed to every CPU thread across all demes
   // () Update the environment
-  std::cout << "ADVANCE ENVIRONMENT" << std::endl;
+  // std::cout << "ADVANCE ENVIRONMENT" << std::endl;
   AdvanceEnvironment();
   // () Evaluate all organisms (demes)
-  std::cout << "EXECUTION" << std::endl;
+  // std::cout << "EXECUTION" << std::endl;
   for (size_t oid = 0; oid < pop.size(); ++oid) {
     if (!IsOccupied(oid)) continue;
     // Distribute CPU cycles to DEME
@@ -826,7 +845,7 @@ void DOLWorld::RunStep() {
   }
   // () Do organism-level (deme-level) reproduction
   emp::Shuffle(*random_ptr, birth_chamber); // Randomize birth chamber priority
-  std::cout << "REPRODUCTION?" << std::endl;
+  // std::cout << "REPRODUCTION?" << std::endl;
   for (size_t oid : birth_chamber) {
     emp_assert(IsOccupied(oid), "Reproducing organism no longer exists?");
     // We have to check if this organism is _still_ reproducing?
