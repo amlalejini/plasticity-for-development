@@ -1,20 +1,20 @@
 #ifndef EMP_CONFIG_WEB_INTERFACE_H
 #define EMP_CONFIG_WEB_INTERFACE_H
 
-/*
+/* *****************************************************************************
+ *
+ * ORIGINAL AUTHOR: Emily Dolson
+ *
+ * This code was pulled out of Emily Dolson's fork of Empirical (the memic_model
+ * branch). URL:
+ * https://github.com/emilydolson/Empirical/blob/memic_model/source/config/config_web_interface.h
+ *
+ * This code has potentially been modified by me (check its git history to see any
+ * edits).
+ *
+ *******************************************************************************/
 
-ORIGINAL AUTHOR: Emily Dolson
-
-This code was pulled out of Emily Dolson's fork of Empirical (the memic_model
-branch). URL:
-https://github.com/emilydolson/Empirical/blob/memic_model/source/config/config_web_interface.h
-
-This code has potentially been modified by me (check its git history to see any
-edits).
-
-*/
-
-#include "config.h"
+#include "config/config.h"
 #include "web/Div.h"
 #include "web/Input.h"
 

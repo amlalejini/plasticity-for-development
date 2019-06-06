@@ -22,11 +22,16 @@ protected:
 
   UI::Document world_view;
   UI::Document stats_view;
-  UI::Document dashboard;
+  UI::Document controls;
+
+  UI::Button run_toggle;
+  UI::Button run_step;
 
 public:
   DOLWorldWebInterface()
-    : world_view("world-view"), stats_view("stats-view"), dashboard("dashboard")
+    : world_view("world-view"),
+      stats_view("stats-view"),
+      controls("controls")
   {
     std::cout << "DOLWorldInterface Constructor" << std::endl;
     SetupInterface();
@@ -40,7 +45,21 @@ public:
     // Setup the world based on default config
     Setup(config);
 
-    // Attach
+    // Create run buttons => Not using Animation's 'GetToggleButton' because we want control over the button's callback.
+    run_toggle = UI::Button([this] () {
+      ToggleActive();
+      run_toggle.SetLabel(active ? "Stop" : "Start");
+      active ? run_step.SetDisabled(true) : run_step.SetDisabled(false);
+    }, "Start", "run-toggle-button");
+    run_toggle.SetAttr("class", "btn btn-primary mx-1");
+
+    run_step = GetStepButton("run-step-button");
+    run_step.SetAttr("class", "btn btn-primary mx-1");
+
+    // Add buttons to dashboard
+    controls << run_toggle;
+    controls << run_step;     // todo - disable step when running
+
   }
 
   void DoFrame() {
