@@ -47,6 +47,7 @@ protected:
   UI::Document world_view;
   UI::Document stats_view;
   UI::Document controls;
+  UI::Document settings_view;
 
   UI::Button run_toggle_but;
   UI::Button run_step_but;
@@ -64,6 +65,8 @@ protected:
   double deme_height=0;
 
   double max_res_level=0;
+
+  bool configuration_edit_mode=false;
 
   canvas_draw_fun_t canvas_draw_fun;
   canvas_draw_fun_t draw_deme_cell_sensors = [this]() {
@@ -171,6 +174,7 @@ public:
     : world_view("world-view"),
       stats_view("stats-view"),
       controls("controls"),
+      settings_view("settings-div"),
       world_display_selector("world-display-selector"),
       world_display(10,10,"world-display-canvas")
   {
@@ -200,30 +204,47 @@ public:
       ToggleActive();
       run_toggle_but.SetLabel(active ? "Stop" : "Start");
       active ? run_step_but.SetDisabled(true) : run_step_but.SetDisabled(false);
+      active ? configure_but.SetDisabled(true) : configure_but.SetDisabled(false);
     }, "Start", "run-toggle-button");
     run_toggle_but.SetAttr("class", "btn btn-primary m-1");
     // Run-step (run world for a single step) button
     run_step_but = GetStepButton("run-step-button");
     run_step_but.SetAttr("class", "btn btn-primary m-1");
-    // todo - configure button
+    // Configure button
     configure_but = UI::Button([this]() {
       std::cout << "Configure!" << std::endl; // todo!
+      configuration_edit_mode = !configuration_edit_mode; // toggle config edit mode
+      // Force show settings
+      if (configuration_edit_mode) { EM_ASM({ $('#collapse-settings').attr("class", "collapse show"); }); }
+      // Enable/disable settings,
+      // todo
+      // Enable/disable buttons disable buttons
+      configuration_edit_mode ? run_step_but.SetDisabled(true) : run_step_but.SetDisabled(false);
+      configuration_edit_mode ? run_toggle_but.SetDisabled(true) : run_toggle_but.SetDisabled(false);
+      configuration_edit_mode ? world_display_selector.Disabled(true) : world_display_selector.Disabled(false);
     }, "Configure", "run-config-button");
     configure_but.SetAttr("class", "btn btn-primary m-1");
 
     world_display_selector.SetOption("Demes - Cell Sensors",
                                      [this]() {
                                        canvas_draw_fun = draw_deme_cell_sensors;
+                                       EM_ASM({
+                                         $('#world-view-card-header').html('World View - Demes - Cell Sensors');
+                                       });
                                        RedrawWorldCanvas();
                                      }, 0);
     world_display_selector.SetOption("Environments - Resource Levels",
                                      [this]() {
                                        canvas_draw_fun = draw_env_res_levels;
+                                       EM_ASM({
+                                         $('#world-view-card-header').html('World View - Environment - Resource Levels');
+                                       });
                                        RedrawWorldCanvas();
                                      }, 1);
     world_display_selector.SetAttr("class", "custom-select");
 
     canvas_draw_fun = draw_deme_cell_sensors;
+    EM_ASM({ $('#world-view-card-header').html('World View - Demes - Cell Sensors'); });
 
     // Add buttons to dashboard
     controls << run_toggle_but;
