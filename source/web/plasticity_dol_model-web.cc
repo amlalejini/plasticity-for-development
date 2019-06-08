@@ -56,6 +56,13 @@ protected:
 
   UI::Canvas world_display;
 
+  emp::vector<std::string> config_input_ids;
+  std::function<std::string(const std::string & val)> format_label_fun =
+    [](const std::string & name) {
+      emp::vector<std::string> sliced = emp::slice(name, '_');
+      return to_titlecase(join(sliced, " "));
+    };
+
   emp::vector<std::string> env_res_color_map;
 
 
@@ -153,6 +160,26 @@ protected:
     return env_res_color_map[env_id];
   };
 
+  void DisableConfigInputs() {
+    for (size_t i = 0; i < config_input_ids.size(); ++i) {
+      EM_ASM({
+        var config_id = UTF8ToString($0);
+        $('#'+config_id).prop('disabled', true);
+
+      }, config_input_ids[i].c_str());
+    }
+  }
+
+  void EnableConfigInputs() {
+    for (size_t i = 0; i < config_input_ids.size(); ++i) {
+      EM_ASM({
+        var config_id = UTF8ToString($0);
+        $('#'+config_id).prop('disabled', false);
+
+      }, config_input_ids[i].c_str());
+    }
+  }
+
   void ConfigCanvasSize() {
     const size_t num_demes = demes.size();
     double parent_w = GetHTMLElementWidthByID("world-view");
@@ -167,6 +194,55 @@ protected:
     emp_assert(num_deme_cols * num_deme_rows >= num_demes);
 
     world_display.SetSize(deme_width*num_deme_cols, deme_height*num_deme_rows);
+  }
+
+  // todo - double check styling works for mobile
+  void AddConfigInputRangeSlider(std::string config_name, double min, double max, double step=1.0) {
+    std::string config_id = emp::to_string(config_name, "_input_slider");
+    std::stringstream html;
+    html << "<form style=\"display:flex; flex-flow:row; align-items:center;\" oninput=\"" << config_id << "_output.value=" << config_id << ".value \">"
+              << "<label for=\"" << config_id << "\">" << format_label_fun(config_name) << "</label>"
+              << "<div class=\"row\">"
+                << "<div class='col-10 pr-0'>"
+                  << "<input type=\"range\""
+                      << "   id=\"" << config_id << "\""
+                      << "   class=\"form-control\""
+                      << "   onchange=\"emp." << config_id << "_update(this.value);\""
+                      << "   value=\"" << config.Get(config_name) << "\""
+                      << "   min=\"" << min << "\""
+                      << "   max=\"" << max << "\""
+                      << "   step=\"" << step << "\""
+                      << ">"
+                  << "</input>"
+                << "</div>"
+                << "<div class='col-2 pl-1'>"
+                  << "<output class=\"badge badge-dark\" for=\"" << config_id << "\" name=\"" << config_id << "_output\">" << config.Get(config_name) << "</output>"
+                << "</div>"
+              << "</div>"
+        << "</form>";
+    // Add HTML to settings view
+    settings_view << html.str();
+    // Add 'onchange' event response function
+    emp::JSWrap([this,config_name,config_id](std::string val) {
+      config.Set(config_name, val);
+    }, emp::to_string(config_id, "_update"));
+    // Track config id
+    config_input_ids.emplace_back(config_id);
+  }
+
+  void SetupSettingsEditor() {
+    // todo - make settings groups an accordian!
+    settings_view << "<h4>Global Settings</h4>";
+    AddConfigInputRangeSlider("CPU_CYCLES_PER_UPDATE", 1, 128);
+
+    // INIT_POP_SIZE, size_t, 1
+    // MAX_POP_SIZE, size_t, 1000
+    settings_view << "<h4>Resource Settings</h4>";
+    settings_view << "<h4>Reproduction Settings</h4>";
+    settings_view << "<h4>Deme Settings</h4>";
+    settings_view << "<h4>Cell Settings</h4>";
+    settings_view << "<h4>Program Settings</h4>";
+    settings_view << "<h4>Mutation Settings</h4>";
   }
 
 public:
@@ -216,8 +292,8 @@ public:
       configuration_edit_mode = !configuration_edit_mode; // toggle config edit mode
       // Force show settings
       if (configuration_edit_mode) { EM_ASM({ $('#collapse-settings').attr("class", "collapse show"); }); }
-      // Enable/disable settings,
-      // todo
+      // Enable/disable settings
+      configuration_edit_mode ? EnableConfigInputs() : DisableConfigInputs();
       // Enable/disable buttons disable buttons
       configuration_edit_mode ? run_step_but.SetDisabled(true) : run_step_but.SetDisabled(false);
       configuration_edit_mode ? run_toggle_but.SetDisabled(true) : run_toggle_but.SetDisabled(false);
@@ -244,13 +320,18 @@ public:
     world_display_selector.SetAttr("class", "custom-select");
 
     canvas_draw_fun = draw_deme_cell_sensors;
-    EM_ASM({ $('#world-view-card-header').html('World View - Demes - Cell Sensors'); });
+    EM_ASM({
+      $('#world-view-card-header').html('World View - Demes - Cell Sensors');
+    });
 
     // Add buttons to dashboard
     controls << run_toggle_but;
     controls << run_step_but;     // todo - disable step when running
     controls << configure_but;
     controls << world_display_selector;
+
+    // Settings view
+    SetupSettingsEditor();
 
     // Stats area
     stats_view << "Update: " << UI::Live( [this]() { return GetUpdate(); } );
@@ -268,11 +349,16 @@ public:
       ConfigCanvasSize();
       RedrawWorldCanvas();
     });
+
+    // Disable all settings
+    DisableConfigInputs();
+
     RedrawWorldCanvas();
     stats_view.Redraw();
   }
 
   void DoFrame() {
+    std::cout << "CPU_CYCLES_PER_UPDATE = " << config.CPU_CYCLES_PER_UPDATE() << std::endl;
     RunStep();
     RedrawWorldCanvas();
     stats_view.Redraw();

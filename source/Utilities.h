@@ -88,4 +88,43 @@ size_t HammingDist(const emp::BitSet<NUM_BITS> & in1, const emp::BitSet<NUM_BITS
   return (in1^in2).CountOnes();
 }
 
+/// Function copied over (and modified) from Emily Dolson's memic_model branch of
+/// her Empirical fork
+static inline std::string to_titlecase(std::string value) {
+  constexpr int char_shift = 'a' - 'A';
+  bool next_upper = true;
+  for (size_t i = 0; i < value.size(); i++) {
+    if (next_upper && value[i] >= 'a' && value[i] <= 'z') {
+      value[i] = (char) (value[i] - char_shift);
+    } else if (!next_upper && value[i] >= 'A' && value[i] <= 'Z') {
+      value[i] = (char) (value[i] + char_shift);
+    }
+    if (value[i] == ' ') {
+      next_upper = true;
+    } else {
+      next_upper = false;
+    }
+  }
+  return value;
+}
+
+/// Function copied over from Emily Dolson's memic_model branch of
+/// her Empirical fork
+template <typename T>
+inline std::string join(const emp::vector<T> & v, std::string join_str) {
+  if (v.size() == 0) {
+    return "";
+  } else if (v.size() == 1) {
+    return emp::to_string(v[0]);
+  } else {
+    std::stringstream res;
+    res << v[0];
+    for (size_t i = 1; i < v.size(); i++) {
+      res << join_str;
+      res << emp::to_string(v[i]);
+    }
+    return res.str();
+  }
+}
+
 #endif
