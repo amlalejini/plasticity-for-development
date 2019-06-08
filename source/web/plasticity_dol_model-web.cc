@@ -34,8 +34,7 @@ double GetHTMLElementHeightByID(const std::string & id) {
 
 class DOLWorldWebInterface : public UI::Animate, public DOLWorld {
 public:
-  static constexpr double MIN_ENV_CANVAS_RES_WIDTH=10;
-  static constexpr double DEME_CELL_SIZE=15;
+  static constexpr double DEME_CELL_SIZE=18;
   static constexpr double DEME_MARGIN_SIZE=5;
 
   using env_res_color_fun_t = std::function<std::string(size_t)>;
@@ -150,7 +149,7 @@ protected:
         double res_height = (res.GetAmount() / max_res_level) * env_height;
         double res_x = env_x + res_width*res_id;
         double res_y = env_y + (env_height - res_height);
-        world_display.Rect(res_x, res_y, res_width, res_height, env_res_color_fun(res_id), env_res_color_fun(res_id));
+        world_display.Rect(res_x, res_y, res_width, res_height, env_res_color_fun(res_id), "black");
       }
     }
   };
@@ -237,12 +236,12 @@ protected:
     settings_view << "<h4>Global Settings</h4>";
     AddConfigInputRangeSlider("CPU_CYCLES_PER_UPDATE", 1, 128);
     AddConfigInputRangeSlider("INIT_POP_SIZE", 1, config.MAX_POP_SIZE());
-    AddConfigInputRangeSlider("MAX_POP_SIZE", config.INIT_POP_SIZE(), 1000);
+    AddConfigInputRangeSlider("MAX_POP_SIZE", config.INIT_POP_SIZE(), 500);
     std::cout << "Added global settings" << std::endl;
 
     settings_view << "<h4>Resource Settings</h4>";
-    AddConfigInputRangeSlider("NUM_STATIC_RESOURCES", 0, 128);
-    AddConfigInputRangeSlider("NUM_PERIODIC_RESOURCES", 0, 128);
+    AddConfigInputRangeSlider("NUM_STATIC_RESOURCES", 0, 8);
+    AddConfigInputRangeSlider("NUM_PERIODIC_RESOURCES", 0, 8);
     // AddConfigInputRangeSlider("STATIC_RESOURCES__LEVEL", 0, 100);
     // AddConfigInputRangeSlider("STATIC_RESOURCES__CONSUME_FIXED", 0, 100);
     // AddConfigInputRangeSlider("STATIC_RESOURCES__FAILURE_COST", 0, 100);
@@ -314,7 +313,7 @@ public:
     max_res_level = emp::Max(config.PERIODIC_RESOURCES__LEVEL(), config.STATIC_RESOURCES__LEVEL());
 
     // Setup color maps
-    env_res_color_map = emp::GetHueMap(TOTAL_RESOURCES, 0, 280, 50, 50);
+    env_res_color_map = emp::GetHueMap(TOTAL_RESOURCES, 0, 250, 85, 50);
 
     emp::JSWrap([this](std::string val) { return config.Get(val); }, "get_config_val");
 
@@ -335,8 +334,18 @@ public:
     configure_but = UI::Button([this]() {
       std::cout << "Configure!" << std::endl; // todo!
       configuration_edit_mode = !configuration_edit_mode; // toggle config edit mode
+      configure_but.SetLabel(configuration_edit_mode ? "Apply" : "Configure");
       // Force show settings
       if (configuration_edit_mode) { EM_ASM({ $('#collapse-settings').attr("class", "collapse show"); }); }
+      if (!configuration_edit_mode) {
+        // Configure mode => !Configure mode: reset the world!
+        // todo - move this stuff to its own function
+        Reset(config);
+        max_res_level = emp::Max(config.PERIODIC_RESOURCES__LEVEL(), config.STATIC_RESOURCES__LEVEL());
+        env_res_color_map = emp::GetHueMap(TOTAL_RESOURCES, 0, 250, 85, 50);
+        RedrawWorldCanvas();
+        stats_view.Redraw();
+      }
       // Enable/disable settings
       configuration_edit_mode ? EnableConfigInputs() : DisableConfigInputs();
       // Enable/disable buttons disable buttons

@@ -42,6 +42,7 @@ public:
   using tag_t = typename sgp_hardware_t::affinity_t;
   using inst_lib_t = typename sgp_hardware_t::inst_lib_t;
   using event_lib_t = typename sgp_hardware_t::event_lib_t;
+  using base_world_t = typename emp::World<DigitalOrganism>;
 
   using sgp_trait_ids_t = typename Deme::CellularHardware::SGPTraitIDs;
 
@@ -578,6 +579,7 @@ void DOLWorld::SetupInstructionSet() {
 /// Setup the environment (might add instructions to the instruction set!)
 void DOLWorld::SetupEnvironment() {
   // Each position in the population has its own local environment
+  environments.clear();
   environments.resize(MAX_POP_SIZE);
   for (size_t env_id = 0; env_id < environments.size(); ++env_id) {
     // std::cout << "Configuring env " << env_id << std::endl;
@@ -639,6 +641,24 @@ void DOLWorld::SetupEnvironment() {
   std::cout << std::endl;
 
   // todo - output a resource tag file
+}
+
+void DOLWorld::Reset(DOLWorldConfig & config) {
+  // --- Clear signals ---
+  // OnOrgDeath
+  on_death_sig.Clear();
+  // OnPlacement
+  on_placement_sig.Clear();
+  // OnOffspringReady
+  offspring_ready_sig.Clear();
+  // --- Clear the world! ---
+  emp::World<DigitalOrganism>::Reset(); // clear world, update = 0
+  // --- Clean up dynamic memory ---
+  inst_lib.Delete();
+  event_lib.Delete();
+  setup = false;
+  // --- Setup the world again! ---
+  Setup(config);
 }
 
 /// Setup the experiment.
