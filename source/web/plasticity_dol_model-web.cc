@@ -200,10 +200,12 @@ protected:
   void AddConfigInputRangeSlider(std::string config_name, double min, double max, double step=1.0) {
     std::string config_id = emp::to_string(config_name, "_input_slider");
     std::stringstream html;
-    html << "<form style=\"display:flex; flex-flow:row; align-items:center;\" oninput=\"" << config_id << "_output.value=" << config_id << ".value \">"
-              << "<label for=\"" << config_id << "\">" << format_label_fun(config_name) << "</label>"
+    html << "<form oninput=\"" << config_id << "_output.value=" << config_id << ".value \">"
               << "<div class=\"row\">"
-                << "<div class='col-10 pr-0'>"
+                << "<div class='col-3 pr-0'>"
+                  << "<label for=\"" << config_id << "\">" << format_label_fun(config_name) << "</label>"
+                << "</div>"
+                << "<div class='col-6 px-0'>"
                   << "<input type=\"range\""
                       << "   id=\"" << config_id << "\""
                       << "   class=\"form-control\""
@@ -215,7 +217,7 @@ protected:
                       << ">"
                   << "</input>"
                 << "</div>"
-                << "<div class='col-2 pl-1'>"
+                << "<div class='col-3 pl-1'>"
                   << "<output class=\"badge badge-dark\" for=\"" << config_id << "\" name=\"" << config_id << "_output\">" << config.Get(config_name) << "</output>"
                 << "</div>"
               << "</div>"
@@ -234,15 +236,56 @@ protected:
     // todo - make settings groups an accordian!
     settings_view << "<h4>Global Settings</h4>";
     AddConfigInputRangeSlider("CPU_CYCLES_PER_UPDATE", 1, 128);
+    AddConfigInputRangeSlider("INIT_POP_SIZE", 1, config.MAX_POP_SIZE());
+    AddConfigInputRangeSlider("MAX_POP_SIZE", config.INIT_POP_SIZE(), 1000);
+    std::cout << "Added global settings" << std::endl;
 
-    // INIT_POP_SIZE, size_t, 1
-    // MAX_POP_SIZE, size_t, 1000
     settings_view << "<h4>Resource Settings</h4>";
+    AddConfigInputRangeSlider("NUM_STATIC_RESOURCES", 0, 128);
+    AddConfigInputRangeSlider("NUM_PERIODIC_RESOURCES", 0, 128);
+    // AddConfigInputRangeSlider("STATIC_RESOURCES__LEVEL", 0, 100);
+    // AddConfigInputRangeSlider("STATIC_RESOURCES__CONSUME_FIXED", 0, 100);
+    // AddConfigInputRangeSlider("STATIC_RESOURCES__FAILURE_COST", 0, 100);
+    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__LEVEL", 0, 100);
+    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__CONSUME_FIXED", 0, 100);
+    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__FAILURE_COST", 0, 100);
+    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE", 0, 100);
+    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__DECAY_DELAY", 0, 100);
+    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__DECAY_FIXED", 0, 100);
+    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__PULSE_PROB", 0, 100);
+
     settings_view << "<h4>Reproduction Settings</h4>";
+    AddConfigInputRangeSlider("DEME_REPRODUCTION_COST", 0, 100);
+    AddConfigInputRangeSlider("TISSUE_ACCRETION_COST", 0, 100);
+
     settings_view << "<h4>Deme Settings</h4>";
+    AddConfigInputRangeSlider("DEME_WIDTH", 1, 10);
+    AddConfigInputRangeSlider("DEME_HEIGHT", 1, 10);
+
     settings_view << "<h4>Cell Settings</h4>";
-    settings_view << "<h4>Program Settings</h4>";
-    settings_view << "<h4>Mutation Settings</h4>";
+    AddConfigInputRangeSlider("SGP_MAX_THREAD_CNT", 1, 32);
+    AddConfigInputRangeSlider("SGP_MAX_CALL_DEPTH", 1, 128);
+    AddConfigInputRangeSlider("SGP_MIN_TAG_MATCH_THRESHOLD", 0.0, 1.0, 0.05);
+
+    // settings_view << "<h4>Program Settings</h4>";
+
+    // settings_view << "<h4>Mutation Settings</h4>";
+
+    // warning - need to be sure that above settings are available for selecting
+    // before running the js below
+    EM_ASM({
+        $('#MAX_POP_SIZE_input_slider').on('change', function() {
+          // console.log('MAX_POP_SIZE_input_slider change');
+          var max_pop_size = emp.get_config_val('MAX_POP_SIZE');
+          // console.log(max_pop_size);
+          $('#INIT_POP_SIZE_input_slider').attr("max", max_pop_size);
+        });
+        $('#INIT_POP_SIZE_input_slider').change(function() {
+          var init_pop_size = emp.get_config_val('INIT_POP_SIZE');
+          // console.log('MAX_POP_SIZE change');
+          $('#MAX_POP_SIZE_input_slider').attr("min", init_pop_size);
+        });
+    });
   }
 
 public:
@@ -272,6 +315,8 @@ public:
 
     // Setup color maps
     env_res_color_map = emp::GetHueMap(TOTAL_RESOURCES, 0, 280, 50, 50);
+
+    emp::JSWrap([this](std::string val) { return config.Get(val); }, "get_config_val");
 
     // SETUP INTERFACE CONTROL BUTTONS
     // Create run/pause button => Not using Animation's 'GetToggleButton' because
@@ -359,6 +404,8 @@ public:
 
   void DoFrame() {
     std::cout << "CPU_CYCLES_PER_UPDATE = " << config.CPU_CYCLES_PER_UPDATE() << std::endl;
+    std::cout << "MAX_POP_SIZE = " << config.MAX_POP_SIZE() << std::endl;
+    std::cout << "INIT_POP_SIZE = " << config.INIT_POP_SIZE() << std::endl;
     RunStep();
     RedrawWorldCanvas();
     stats_view.Redraw();
