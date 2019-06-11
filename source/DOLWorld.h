@@ -39,6 +39,7 @@ public:
   using sgp_program_t = typename sgp_hardware_t::Program;
   using sgp_memory_t = typename sgp_hardware_t::memory_t;
   using sgp_inst_t = typename sgp_hardware_t::inst_t;
+  using sgp_event_t = typename sgp_hardware_t::event_t;
   using tag_t = typename sgp_hardware_t::affinity_t;
   using inst_lib_t = typename sgp_hardware_t::inst_lib_t;
   using event_lib_t = typename sgp_hardware_t::event_lib_t;
@@ -49,6 +50,11 @@ public:
   using deme_seed_fun_t = std::function<void(Deme&, org_t&)>;
   using consume_resource_fun_t = std::function<void(size_t,size_t,size_t)>;
   using decay_resource_fun_t = std::function<void(size_t,size_t)>;
+
+  using inst_attempt_cell_division_fun_t = std::function<void(size_t,size_t,const sgp_inst_t&)>;
+
+  using sgp_event_handler_fun_t = std::function<void(sgp_hardware_t&, const sgp_event_t&)>;
+  using sgp_event_dispatcher_fun_t = std::function<void(sgp_hardware_t&, const sgp_event_t&)>;
 
   /// Each deme has a local environment
   struct Environment {
@@ -142,6 +148,12 @@ protected:
   consume_resource_fun_t fun_consume_fail;
   decay_resource_fun_t fun_decay_resource;
 
+  inst_attempt_cell_division_fun_t fun_instruction_attempted_cell_division; ///< What an instruction calls when it attempts to trigger cell division
+
+  sgp_event_handler_fun_t fun_handle_msg;
+  sgp_event_dispatcher_fun_t fun_dispatch_broadcast_msg;
+  sgp_event_dispatcher_fun_t fun_dispatch_send_msg;
+
   // Internal functions
   void InitConfigs(DOLWorldConfig & config);
   void InitPop(DOLWorldConfig & config);
@@ -150,6 +162,7 @@ protected:
 
   void SetupDemeHardware();
   void SetupInstructionSet();
+  void SetupEventSet();
   void SetupEnvironment();
 
   /// Attempt to metabolize resource
@@ -482,6 +495,66 @@ void DOLWorld::SetupDemeHardware() {
   }
 }
 
+/// Setup the signalgp event set
+void DOLWorld::SetupEventSet() {
+
+  // REMINDER:
+  // - Event Handlers:
+  //   - hw = hardware that is _handling_ (received) the event
+  //   - event = event that is being handled on hw
+  // - Event Dispatchers:
+  //   - hw = hardware that is dispatching (emitting) the event)
+  //   - event = event that is being dispatched
+  // Generally, dispatchers will queue the given events on appropriate receiver
+  // hardware (not necessarily the given hardware), and handlers will process the
+  // given event on the given hardware.
+
+  // todo - do we want handlers/dispatchers that do local=>local mem vs output=>input
+  //        mem?
+  fun_handle_msg = [this](sgp_hardware_t & hw, const sgp_event_t & event) {
+    hw.SpawnCore(event.affinity, hw.GetMinBindThresh(), event.msg);
+  };
+
+  fun_dispatch_broadcast_msg = [this](sgp_hardware_t & hw, const sgp_event_t & event) {
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    Deme & deme = this->GetDeme(world_id);
+    emp_assert(deme.IsActive());
+    // Dispatch event to all neighboring cells
+    for (size_t d = 0; d < Deme::NUM_DIRECTIONS; ++d) {
+      // Who is thy neighbor in direction[d]?
+      const size_t neighbor_cell_id = deme.GetNeighboringCellID(cell_id, Deme::Dir[d]);
+      // if neighboring cell is not active, do not message
+      // if neighboring cell == this cell (small deme=>wrap around), do not message
+      if ( (!deme.IsCellActive(neighbor_cell_id)) || cell_id == neighbor_cell_id) continue;
+      // pass that message!
+      Deme::CellularHardware & neighbor_cell = deme.GetCell(neighbor_cell_id);
+      neighbor_cell.sgp_hw.QueueEvent(event);
+    }
+  };
+
+  fun_dispatch_send_msg = [this](sgp_hardware_t & hw, const sgp_event_t & event) {
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    Deme & deme = this->GetDeme(world_id);
+    emp_assert(deme.IsActive());
+    const size_t neighbor_cell_id = deme.GetNeighboringCellID(cell_id, deme.GetCellFacing(cell_id));
+    // Is neighbor active?
+    if (deme.IsCellActive(neighbor_cell_id) && cell_id != neighbor_cell_id) {
+      Deme::CellularHardware & neighbor_cell = deme.GetCell(neighbor_cell_id);
+      neighbor_cell.sgp_hw.QueueEvent(event);
+    }
+  };
+
+  // Messaging events
+  event_lib->AddEvent("SendMessageFacing", fun_handle_msg, "SendMessage event (cell (facing) ==={MESSAGE}===> cell)");
+  event_lib->AddEvent("BroadcastMessage", fun_handle_msg, "Broadcast message event");
+
+  // Register messaging dispatchers
+  event_lib->RegisterDispatchFun("SendMessageFacing", fun_dispatch_send_msg);
+  event_lib->RegisterDispatchFun("BroadcastMessage", fun_dispatch_broadcast_msg);
+}
+
 /// Setup the signalgp instruction set - todo (finish)!
 void DOLWorld::SetupInstructionSet() {
   // Default instructions
@@ -514,12 +587,86 @@ void DOLWorld::SetupInstructionSet() {
   // inst_lib->AddInst("Fork", Inst_Fork, 0, "Fork a new thread. Local memory contents of callee are loaded into forked thread's input memory.");
   inst_lib->AddInst("Terminate", sgp_hardware_t::Inst_Terminate, 0, "Kill current thread.");
 
-  // todo - deme instructions (send-msg, broadcast-msg, etc)
-  // todo - odometry (facing)
-  // todo - 'movement' (rot-cw-45, rot-ccw-45, rot-90, rot-180, rot-nxt-neighbor)
-  // todo - reproduction (???)
+  // Messaging instructions
+  inst_lib->AddInst("SendMsgFacing", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    sgp_hardware_t::State & state = hw.GetCurState();
+    hw.TriggerEvent("SendMessageFacing", inst.affinity, state.output_mem);
+  }, 0, "Send messaging to neighbor in direction that cell is facing");
+  inst_lib->AddInst("BroadcastMsg", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    sgp_hardware_t::State & state = hw.GetCurState();
+    hw.TriggerEvent("BroadcastMessage", inst.affinity, state.output_mem);
+  }, 0, "Broadcast message to all neighbors");
 
-  // Add resource donation instructions to instructino set
+  // Is faced cell empty?
+  inst_lib->AddInst("IsFacingActive", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    sgp_hardware_t::State & state = hw.GetCurState();
+    Deme & deme = this->GetDeme(world_id);
+    state.SetLocal(inst.args[0], deme.IsCellActive(deme.GetNeighboringCellID(cell_id, deme.GetCellFacing(cell_id))));
+  }, 1, "Is the neighboring cell faced by this cell empty (inactive)?");
+
+  // Get/set facing
+  inst_lib->AddInst("GetFacing", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    const size_t facing = (size_t)this->GetDeme(world_id).GetCellFacing(cell_id);
+    sgp_hardware_t::State & state = hw.GetCurState();
+    state.SetLocal(inst.args[0], facing);
+  }, 1, "Get cell facing");
+  inst_lib->AddInst("SetFacing", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    sgp_hardware_t::State & state = hw.GetCurState();
+    const Deme::Facing facing = Deme::Dir[emp::Mod((int)state.GetLocal(inst.args[0]), (int)Deme::NUM_DIRECTIONS)];
+    this->GetDeme(world_id).SetCellFacing(cell_id, facing);
+  }, 1, "Set cell facing to local_mem[arg[0]] % NUM_DIRECTIONS");
+
+  // Add simple rotation instructions
+  inst_lib->AddInst("RotateCW", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    this->GetDeme(world_id).RotateCellCW(cell_id, 1);
+  }, 0, "Rotate cell one step clockwise.");
+  inst_lib->AddInst("RotateCCW", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    this->GetDeme(world_id).RotateCellCCW(cell_id, 1);
+  }, 0, "Rotate cell one step counter clockwise.");
+  inst_lib->AddInst("Rotate", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    sgp_hardware_t::State & state = hw.GetCurState();
+    this->GetDeme(world_id).RotateCellCCW(cell_id, (int)state.GetLocal(inst.args[0]));
+  }, 1, "Rotate cell local_mem[arg[0]]. If rotation is negative, rotate ccw. If rotation is 0, no rotation. If rotation is positive, rotate cw.");
+
+  // Reproduction
+  inst_lib->AddInst("CellDivide", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    fun_instruction_attempted_cell_division(world_id, cell_id, inst);
+  }, 0, "Trigger cell division");
+
+  // Once a soma-lineage has set their repro tag, that repro tag is locked in
+  inst_lib->AddInst("SetDivisionTag", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
+    // Localize world id and cell id
+    const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
+    const size_t cell_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__CELL_ID);
+    Deme & deme = GetDeme(world_id);
+    Deme::CellularHardware & cell = deme.GetCell(cell_id);
+    if (!cell.repro_tag_locked) { // If cell's repro tag isn't locked, lock it in w/instruction's tag
+      deme.GetCell(cell_id).LockReproTag(inst.affinity);
+    }
+  });
+
+  // Add resource donation instructions to instruction set
   inst_lib->AddInst("DonateResources", [this](sgp_hardware_t & hw, const sgp_inst_t & inst) {
     // Localize world id and cell id
     const size_t world_id = (size_t)hw.GetTrait(sgp_trait_ids_t::TRAIT_ID__DEME_ID);
@@ -676,9 +823,10 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   inst_lib = emp::NewPtr<inst_lib_t>();
   event_lib = emp::NewPtr<event_lib_t>();
 
-  // todo - setup setup signalgp instruction/event libraries
   // Setup the environment
   SetupEnvironment();
+  // Setup event set
+  SetupEventSet();
   // Setup instruction set
   SetupInstructionSet();
   // Setup deme hardware
@@ -693,10 +841,13 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
   // todo - move this functionality into deme?
   fun_seed_deme = [this](Deme & deme, org_t & org) {
     // (1) select a random cell in the deme
-    const size_t cell_id = GetRandom().GetUInt(deme.GetCellCapacity());
+    // const size_t cell_id = GetRandom().GetUInt(deme.GetCellCapacity());
+    const size_t cell_id = (size_t)deme.GetCellCapacity()/2;
     Deme::CellularHardware & cell_hw = deme.GetCell(cell_id);
     // (2) activate focal cell
-    cell_hw.ActivateCell(org.GetGenome().program, org.GetGenome().birth_tag, sgp_memory_t(), true);
+    // - Program = genome's program, entry point tag = genome's birth tag, initial input memory = empty,
+    //   entry point function main? = no, lock in entry point tag? = no
+    cell_hw.ActivateCell(org.GetGenome().program, org.GetGenome().birth_tag, sgp_memory_t(), false, false);
   };
 
   // What happens when an organism consumes a resource?
@@ -782,6 +933,53 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     std::cout << "Unrecognized RESOURCE_DECAY_MODE (" << RESOURCE_DECAY_MODE << ")! Exiting." << std::endl;
     exit(-1);
   }
+
+  // Setup instruction-triggered cellular division (within-deme reproduction)
+  fun_instruction_attempted_cell_division = [this](size_t world_id,
+                                                   size_t cell_id,
+                                                   const sgp_inst_t & inst) {
+    // Get deme
+    Deme & deme = this->GetDeme(world_id);
+    emp_assert(deme.IsCellActive(cell_id));
+    emp_assert(IsOccupied(world_id));
+    Deme::CellularHardware & cell = deme.GetCell(cell_id);
+    // Does cell have the requisite resources to reproduce?
+    if (cell.local_resources < TISSUE_ACCRETION_COST) {
+      return; // If not, return
+    }
+    // Where is cell reproducing into?
+    const size_t offspring_cell_id = deme.GetNeighboringCellID(cell_id, deme.GetCellFacing(cell_id));
+    // Not allowed to reproduce over yourself?
+    if (offspring_cell_id == cell_id) {
+      std::cout << "Organism ("<<cell_id<<") trying to birth over itself("<<offspring_cell_id<<")?" << std::endl;
+      std::cout << "Facing? " << deme.FacingStr(deme.GetCellFacing(cell_id)) << std::endl;
+      std::cout << "Neighbor? " << deme.GetNeighboringCellID(cell_id, deme.GetCellFacing(cell_id)) << std::endl;
+      std::cout << "Neighbor map: "<< std::endl;
+      deme.PrintNeighborMap();
+      std::cout << "================" << std::endl;
+      for (size_t id = 0; id < deme.GetCellCapacity(); ++id) {
+        size_t world_id = deme.GetCell(id).GetDemeID();
+        size_t cell_id = deme.GetCell(id).GetCellID();
+        std::cout << "  Deme-"<< deme.GetDemeID()<<" Cell " << id << ": world_id ="<< world_id <<"; cell_id ="<< cell_id <<";" << std::endl;
+      }
+      exit(0);
+
+      return;
+    }
+    // If that location is already active, reset it (killing existing cell)
+    if (deme.IsCellActive(offspring_cell_id)) {
+      deme.GetCell(offspring_cell_id).Reset();
+    }
+
+    // Do the reproduction (active offspring cell)
+    deme.GetCell(offspring_cell_id).ActivateCell(cell.sgp_hw.GetProgram(),      // What program should we initialize cell with?
+                                                 cell.repro_tag,                // What tag should we use to trigger init function with?
+                                                 sgp_memory_t(),                // What should input memory of init function call be?
+                                                 false,                         // Should init function be a 'main'?
+                                                 cell.repro_tag_locked);        // Should offspring's repro tag be locked?
+    // pay costs of reproduction
+    cell.local_resources -= TISSUE_ACCRETION_COST;
+  };
 
   // What to do when an organism dies?
   // - deactivate the deme hardware
