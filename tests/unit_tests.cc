@@ -315,3 +315,68 @@ TEST_CASE ( "Resource", "[resource]") {
 TEST_CASE ( "Mutator", "[mutator]") {
   // todo!
 }
+
+TEST_CASE ("Deme - Rotation", "[world][deme]") {
+  std::cout << "Hello?" << std::endl;
+  std::cout << "-10%8=" << emp::Mod(-10, 8) << std::endl;
+
+  using facing_t = Deme::Facing;
+
+  Deme deme3x3(3, 3, nullptr, nullptr, nullptr);
+  // Check facing
+  const size_t mid_id = 4;
+  // deme3x3.PrintNeighborMap();
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::N) == 7);
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::NE) == 8);
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::E) == 5);
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::SE) == 2);
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::S) == 1);
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::SW) == 0);
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::W) == 3);
+  REQUIRE(deme3x3.GetNeighboringCellID(mid_id, facing_t::NW) == 6);
+  // Okay, check facing of mid id
+  deme3x3.SetCellFacing(mid_id, facing_t::N);
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::N);
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == deme3x3.GetCell(mid_id).cell_facing);
+  // Do some rotations!
+  deme3x3.RotateCellCW(mid_id); // NE
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::NE);
+  deme3x3.RotateCellCW(mid_id); // E
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::E);
+  deme3x3.RotateCellCW(mid_id); // SE
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::SE);
+  deme3x3.RotateCellCW(mid_id); // S
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::S);
+  deme3x3.RotateCellCW(mid_id); // SW
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::SW);
+  deme3x3.RotateCellCW(mid_id); // W
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::W);
+  deme3x3.RotateCellCW(mid_id); // NW
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::NW);
+  deme3x3.RotateCellCW(mid_id); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::N);
+  // Test multi-step rotations
+  deme3x3.SetCellFacing(mid_id, facing_t::N);
+  deme3x3.RotateCellCW(mid_id, 3); // SE
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::SE);
+  deme3x3.RotateCellCW(mid_id, 4); // NW
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::NW);
+  deme3x3.RotateCellCW(mid_id, 2); // NE
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::NE);
+  deme3x3.RotateCellCCW(mid_id);   // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::N);
+  // Test multi-step, multi-cycle rotations
+  deme3x3.SetCellFacing(mid_id, facing_t::N);
+  deme3x3.RotateCellCW(mid_id, 16); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::N);
+  deme3x3.RotateCellCW(mid_id, 32); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::N);
+  deme3x3.RotateCellCCW(mid_id, 16); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::N);
+  deme3x3.RotateCellCCW(mid_id, 32); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::N);
+  deme3x3.RotateCellCW(mid_id, 17); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::NE);
+  deme3x3.RotateCellCCW(mid_id, 7); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::E);
+}

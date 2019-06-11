@@ -17,6 +17,13 @@
 #include "DOLWorldConfig.h"
 #include "DigitalOrganism.h"
 
+/*
+  Deme Indexing (e.g., 3x3):
+    6 7 8
+    3 4 5
+    0 1 2
+*/
+
 /// A 'deme' of CellularHardware.
 class Deme {
 public:
@@ -39,15 +46,14 @@ public:
   /// contain instruction libraries templated off of SGP hardware =/= inst_lib<CellularHardware>
   struct CellularHardware {
 
-    size_t cell_id = 0;
-    sgp_hardware_t sgp_hw;
-    bool active = false;
-
     // SignalGP trait ids
-    // -
     enum SGPTraitIDs { TRAIT_ID__DEME_ID=0, TRAIT_ID__CELL_ID=1 };
 
-    // - sensors: emp::vector<size_t> sensors;
+    size_t cell_id = 0;
+    bool active = false;
+    Facing cell_facing = Facing::N;
+    sgp_hardware_t sgp_hw;
+
     emp::vector<bool> resource_sensors;         ///< One sensor per resource
     emp::vector<bool> metabolized_on_advance;   ///< Which resources is cell attempting to metabolize?
     double local_resources=0.0;                 ///< Reservoir of resources local to this cell
@@ -90,6 +96,22 @@ public:
     void SetResourceSensor(size_t sensor_id, bool on) {
       emp_assert(sensor_id < resource_sensors.size());
       resource_sensors[sensor_id] = on;
+    }
+
+    // todo - test
+    void RotateCW(int rot=1) {
+      const int cur_dir = (int)cell_facing;
+      const size_t new_dir = (size_t)emp::Mod(cur_dir+rot, (int)Deme::NUM_DIRECTIONS);
+      emp_assert(new_dir < Deme::NUM_DIRECTIONS);
+      cell_facing = Deme::Dir[new_dir];
+    }
+
+    // todo - test
+    void RotateCCW(int rot=1) {
+      const int cur_dir = (int)cell_facing;
+      const size_t new_dir = (size_t)emp::Mod(cur_dir-rot, (int)Deme::NUM_DIRECTIONS);
+      emp_assert(new_dir < Deme::NUM_DIRECTIONS);
+      cell_facing = Deme::Dir[new_dir];
     }
   };
 
@@ -151,6 +173,9 @@ public:
   /// Get const cell at position ID (outsource bounds checking to emp::vector)
   const CellularHardware & GetCell(size_t id) const { return cells[id]; }
 
+  /// Get cell ID's current facing
+  Facing GetCellFacing(size_t id) const { return cells[id].cell_facing; }
+
   /// Is cell @ ID active?
   bool IsCellActive(size_t id) const { return cells[id].active; }
 
@@ -174,6 +199,16 @@ public:
 
   /// Set SignalGP hardware (on cellular hardware) tie break procedure
   void SetCellHardwareStochasticTieBreaks(bool val);
+
+  /// Set cell facing
+  void SetCellFacing(size_t id, Facing facing) { cells[id].cell_facing = facing; }
+
+  /// Rotate cell in the clockwise direction (e.g., N=>NE=>E=>...) 'rot' number
+  /// of times
+  void RotateCellCW(size_t cell_id, int rot=1);
+
+  /// Rotate cell in the counter clockwise direction 'rot' number
+  void RotateCellCCW(size_t cell_id, int rot=1);
 
   /// Activate deme - todo - maybe more required to activate deme (e.g., loading a digital organism)
   /// - used to flag that deme is currently active (running)
@@ -314,6 +349,22 @@ void Deme::SetCellHardwareStochasticTieBreaks(bool val) {
   for (CellularHardware & cell : cells) {
     cell.sgp_hw.SetStochasticFunCall(val);
   }
+}
+
+/// Rotate cell in the clockwise direction (e.g., N=>NE=>E=>...) 'rot' number
+/// of times
+// todo - test
+void Deme::RotateCellCW(size_t cell_id, int rot /* = 1*/) {
+  CellularHardware & cell = cells[cell_id];
+  cell.RotateCW(rot);
+
+}
+
+/// Rotate cell in the counter clockwise direction 'rot' number
+// todo - test
+void Deme::RotateCellCCW(size_t cell_id, int rot /* = 1*/) {
+  CellularHardware & cell = cells[cell_id];
+  cell.RotateCCW(rot);
 }
 
 /// Given a Facing direction, return a representative string (useful for debugging)
