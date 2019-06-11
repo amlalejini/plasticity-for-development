@@ -44,6 +44,7 @@ public:
   /// Hardware unit that each cell in a deme 'runs' on
   /// Note, CellularHardware can't extend SGP hardware because SGP programs
   /// contain instruction libraries templated off of SGP hardware =/= inst_lib<CellularHardware>
+  // TODO convert to class (promote out of deme?)
   struct CellularHardware {
 
     // SignalGP trait ids
@@ -52,6 +53,8 @@ public:
     size_t cell_id = 0;
     bool active = false;
     Facing cell_facing = Facing::N;
+    tag_t repro_tag = tag_t();
+    bool repro_tag_locked = false;
     sgp_hardware_t sgp_hw;
 
     emp::vector<bool> resource_sensors;         ///< One sensor per resource
@@ -69,19 +72,25 @@ public:
       emp_assert(resource_sensors.size() == metabolized_on_advance.size());
       sgp_hw.ResetProgram();
       active = false;
+      repro_tag.Clear();
+      repro_tag_locked = false;
       for (size_t i = 0; i < resource_sensors.size(); ++i) {
         resource_sensors[i] = false;
         metabolized_on_advance[i] = false;
       }
+      local_resources=0.0;
     }
 
     void ActivateCell(const sgp_program_t & program,
                       const tag_t & init_tag,
                       const sgp_memory_t & init_mem,
-                      bool init_main) {
+                      bool init_main,
+                      bool lock_repro_tag = false) {
       sgp_hw.SetProgram(program);
       sgp_hw.SpawnCore(init_tag, sgp_hw.GetMinBindThresh(), init_mem, init_main);
       active = true;
+      repro_tag = init_tag;
+      repro_tag_locked = lock_repro_tag; // Should we lock this repro tag in?
     }
 
     void AdvanceStep() {
@@ -98,7 +107,9 @@ public:
       resource_sensors[sensor_id] = on;
     }
 
-    // todo - test
+    void LockReproTag(const tag_t & tag) { repro_tag_locked = true; repro_tag = tag; }
+
+    /// Rotate cell clockwise a given number of steps
     void RotateCW(int rot=1) {
       const int cur_dir = (int)cell_facing;
       const size_t new_dir = (size_t)emp::Mod(cur_dir+rot, (int)Deme::NUM_DIRECTIONS);
@@ -106,12 +117,20 @@ public:
       cell_facing = Deme::Dir[new_dir];
     }
 
-    // todo - test
+    /// Rotate cell counter clockwise a given number of steps
     void RotateCCW(int rot=1) {
       const int cur_dir = (int)cell_facing;
       const size_t new_dir = (size_t)emp::Mod(cur_dir-rot, (int)Deme::NUM_DIRECTIONS);
       emp_assert(new_dir < Deme::NUM_DIRECTIONS);
       cell_facing = Deme::Dir[new_dir];
+    }
+
+    size_t GetDemeID() const {
+      return (size_t)sgp_hw.GetTrait(SGPTraitIDs::TRAIT_ID__DEME_ID);
+    }
+
+    size_t GetCellID() const {
+      return (size_t)sgp_hw.GetTrait(SGPTraitIDs::TRAIT_ID__CELL_ID);
     }
   };
 
@@ -269,8 +288,8 @@ void Deme::BuildNeighborLookup()  {
 }
 
 size_t Deme::CalcNeighbor(size_t id, Facing dir) const {
-  int facing_x = (int)GetCellY(id);
-  int facing_y = (int)GetCellX(id);
+  int facing_y = (int)GetCellY(id);
+  int facing_x = (int)GetCellX(id);
   switch (dir) {
     case Facing::N:
       facing_y = emp::Mod(facing_y + 1, (int)height);
@@ -357,7 +376,6 @@ void Deme::SetCellHardwareStochasticTieBreaks(bool val) {
 void Deme::RotateCellCW(size_t cell_id, int rot /* = 1*/) {
   CellularHardware & cell = cells[cell_id];
   cell.RotateCW(rot);
-
 }
 
 /// Rotate cell in the counter clockwise direction 'rot' number
