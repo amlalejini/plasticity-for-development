@@ -317,9 +317,6 @@ TEST_CASE ( "Mutator", "[mutator]") {
 }
 
 TEST_CASE ("Deme - Rotation", "[world][deme]") {
-  std::cout << "Hello?" << std::endl;
-  std::cout << "-10%8=" << emp::Mod(-10, 8) << std::endl;
-
   using facing_t = Deme::Facing;
 
   Deme deme3x3(3, 3, nullptr, nullptr, nullptr);
@@ -379,4 +376,11 @@ TEST_CASE ("Deme - Rotation", "[world][deme]") {
   REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::NE);
   deme3x3.RotateCellCCW(mid_id, 7); // N
   REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::E);
+
+  deme3x3.SetCellFacing(mid_id, facing_t::N);
+  deme3x3.RotateCellCW(mid_id, -2); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::W);
+  deme3x3.RotateCellCW(mid_id, -17); // N
+  REQUIRE(deme3x3.GetCellFacing(mid_id) == facing_t::SW);
+
 }
