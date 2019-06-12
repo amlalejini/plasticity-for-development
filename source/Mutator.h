@@ -41,9 +41,13 @@ public:
   }
 
   size_t Mutate(DigitalOrganism & org, emp::Random & rnd) {
+    return Mutate(org.GetGenome(), rnd);
+  }
+
+  size_t Mutate(DigitalOrganism::Genome & genome, emp::Random & rnd) {
     size_t num_mutations = 0;
-    num_mutations += sgp_program_mutator.ApplyMutations(org.GetGenome().program, rnd);
-    tag_t & tag = org.GetGenome().birth_tag;
+    num_mutations += sgp_program_mutator.ApplyMutations(genome.program, rnd);
+    tag_t & tag = genome.birth_tag;
     for (size_t k = 0; k < tag.GetSize(); ++k) {
       if (rnd.P(BIRTH_TAG_BIT_FLIP__PER_BIT)) {
         tag.Toggle(k);
