@@ -5,6 +5,8 @@
 #include "DOLWorld.h"
 #include "DOLWorldConfig.h"
 #include "DigitalOrganism.h"
+#include "Mutator.h"
+#include "Utilities.h"
 #include "Resource.h"
 
 // Tests
@@ -429,7 +431,50 @@ TEST_CASE ( "Resource", "[resource]") {
 }
 
 TEST_CASE ( "Mutator", "[mutator]") {
-  // todo!
+  using genome_t = typename DigitalOrganism::Genome;
+  using sgp_hardware_t = typename DOLWorld::sgp_hardware_t;
+  using inst_lib_t = typename DOLWorld::inst_lib_t;
+
+  emp::Random rnd(10);
+  inst_lib_t inst_lib;
+  DOLWorldConfig config;
+  Mutator mutator;
+
+  inst_lib.AddInst("Nop-A", sgp_hardware_t::Inst_Nop, 0, "No operation.");
+  inst_lib.AddInst("Nop-B", sgp_hardware_t::Inst_Nop, 0, "No operation.");
+  inst_lib.AddInst("Nop-C", sgp_hardware_t::Inst_Nop, 0, "No operation.");
+
+  // Set program constraints
+  config.MIN_FUNCTION_CNT(1);
+  config.MAX_FUNCTION_CNT(64);
+  config.MIN_FUNCTION_LEN(1);
+  config.MAX_FUNCTION_LEN(128);
+  config.MIN_ARGUMENT_VAL(0);
+  config.MAX_ARGUMENT_VAL(32);
+  // Crank up the mutation rates
+  config.PROGRAM_ARG_SUB__PER_ARG(0.1);
+  config.PROGRAM_INST_SUB__PER_INST(0.1);
+  config.PROGRAM_INST_INS__PER_INST(0.1);
+  config.PROGRAM_INST_DEL__PER_INST(0.1);
+  config.PROGRAM_SLIP__PER_FUN(0.1);
+  config.PROGRAM_FUNC_DUP__PER_FUN(0.1);
+  config.PROGRAM_FUNC_DEL__PER_FUN(0.1);
+  config.PROGRAM_TAG_BIT_FLIP__PER_BIT(0.1);
+  config.BIRTH_TAG_BIT_FLIP__PER_BIT(0.1);
+
+  mutator.Setup(config); // Configure the mutator
+
+  // Test lots of mutated random genomes
+  for (size_t i = 0; i < 1000; ++i) {
+    // (1) Generate a random genome
+    genome_t genome = GenRandDigitalOrganismGenome(rnd, inst_lib, config);
+    REQUIRE(ValidateDigitalOrganismGenome(config, genome));
+    // (2) Mutate genome a bunch, validating each time
+    for (size_t m = 0; m < 10; ++m) {
+      mutator.Mutate(genome, rnd);
+      REQUIRE(ValidateDigitalOrganismGenome(config, genome));
+    }
+  }
 }
 
 TEST_CASE ("Utilities - GenRandTag") {
