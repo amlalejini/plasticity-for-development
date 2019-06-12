@@ -197,6 +197,26 @@ TEST_CASE ("Deme - Reset", "[deme]") {
   }
 }
 
+TEST_CASE ("Deme - CellularHardware", "[deme][cell_hardware]") {
+  Deme deme3x3(3, 3, nullptr, nullptr, nullptr);
+  // Test set resource sensor function
+  deme3x3.SetupCellMetabolism(9);
+  for (size_t i = 0; i < 3*3; ++i) {
+    Deme::CellularHardware & cell = deme3x3.GetCell(i);
+    cell.SetResourceSensor(i, true);
+  }
+  for (size_t i = 0; i < 3*3; ++i) {
+    Deme::CellularHardware & cell = deme3x3.GetCell(i);
+    for (size_t j = 0; j < 3*3; ++j) {
+      if (j == i) {
+        REQUIRE(cell.resource_sensors[j]);
+      } else {
+        REQUIRE(!cell.resource_sensors[j]);
+      }
+    }
+  }
+}
+
 TEST_CASE ( "DOLWorld Setup - Random Population Initialization", "[world][setup][population]" ) {
   // Create a configuration object
   DOLWorldConfig config;
