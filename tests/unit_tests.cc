@@ -521,7 +521,30 @@ TEST_CASE ("Utilities - GenRandTags", "[utilities]") {
 }
 
 TEST_CASE ("Utilities - GenHadamardMatrix") {
-  // todo
+  constexpr size_t TWIDTH = 4;
+  using tag_t = emp::BitSet<TWIDTH>;
+  emp::Random rnd(10);
+  // 4 bit tags
+  emp::vector<tag_t> tags = GenHadamardMatrix<TWIDTH>();
+  // std::cout << "Tags: " << std::endl;
+  for (size_t i = 0; i < tags.size(); ++i) {
+    for (size_t j = i+1; j < tags.size(); ++j) {
+      // std::cout << "tag["<<i<<"] vs tag["<<j<<"] = "<< emp::SimpleMatchCoeff(tags[i], tags[j]) << std::endl;
+      REQUIRE(emp::SimpleMatchCoeff(tags[i], tags[j]) == 0.5);
+      REQUIRE(HammingDist(tags[i], tags[j]) == 2);
+    }
+  }
+  // 16 bit tags
+  using tag16_t = emp::BitSet<16>;
+  emp::vector<tag16_t> tags16 = GenHadamardMatrix<16>();
+  // std::cout << "Tags: " << std::endl;
+  for (size_t i = 0; i < tags16.size(); ++i) {
+    for (size_t j = i+1; j < tags16.size(); ++j) {
+      // std::cout << "tag["<<i<<"] vs tag["<<j<<"] = "<< emp::SimpleMatchCoeff(tags[i], tags[j]) << std::endl;
+      REQUIRE(emp::SimpleMatchCoeff(tags16[i], tags16[j]) == 0.5);
+      REQUIRE(HammingDist(tags16[i], tags16[j]) == 8);
+    }
+  }
 }
 
 TEST_CASE ("Utilities - to_titlecase") {
