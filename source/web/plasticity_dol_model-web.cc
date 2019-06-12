@@ -242,20 +242,20 @@ protected:
     settings_view << "<h4>Resource Settings</h4>";
     AddConfigInputRangeSlider("NUM_STATIC_RESOURCES", 0, 8);
     AddConfigInputRangeSlider("NUM_PERIODIC_RESOURCES", 0, 8);
-    // AddConfigInputRangeSlider("STATIC_RESOURCES__LEVEL", 0, 100);
-    // AddConfigInputRangeSlider("STATIC_RESOURCES__CONSUME_FIXED", 0, 100);
+    AddConfigInputRangeSlider("STATIC_RESOURCES__LEVEL", 0, 100);
+    AddConfigInputRangeSlider("STATIC_RESOURCES__CONSUME_FIXED", 0, 100);
     // AddConfigInputRangeSlider("STATIC_RESOURCES__FAILURE_COST", 0, 100);
-    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__LEVEL", 0, 100);
-    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__CONSUME_FIXED", 0, 100);
-    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__FAILURE_COST", 0, 100);
+    AddConfigInputRangeSlider("PERIODIC_RESOURCES__LEVEL", 0, 100);
+    AddConfigInputRangeSlider("PERIODIC_RESOURCES__CONSUME_FIXED", 0, 100);
+    AddConfigInputRangeSlider("PERIODIC_RESOURCES__FAILURE_COST", 0, 100);
     // AddConfigInputRangeSlider("PERIODIC_RESOURCES__MIN_UPDATES_UNAVAILABLE", 0, 100);
     // AddConfigInputRangeSlider("PERIODIC_RESOURCES__DECAY_DELAY", 0, 100);
-    // AddConfigInputRangeSlider("PERIODIC_RESOURCES__DECAY_FIXED", 0, 100);
+    AddConfigInputRangeSlider("PERIODIC_RESOURCES__DECAY_FIXED", 0, 100);
     // AddConfigInputRangeSlider("PERIODIC_RESOURCES__PULSE_PROB", 0, 100);
 
     settings_view << "<h4>Reproduction Settings</h4>";
-    AddConfigInputRangeSlider("DEME_REPRODUCTION_COST", 0, 100);
-    AddConfigInputRangeSlider("TISSUE_ACCRETION_COST", 0, 100);
+    AddConfigInputRangeSlider("DEME_REPRODUCTION_COST", 0, 1000);
+    AddConfigInputRangeSlider("TISSUE_ACCRETION_COST", 0, 1000);
 
     settings_view << "<h4>Deme Settings</h4>";
     AddConfigInputRangeSlider("DEME_WIDTH", 1, 10);
@@ -343,6 +343,7 @@ public:
         Reset(config);
         max_res_level = emp::Max(config.PERIODIC_RESOURCES__LEVEL(), config.STATIC_RESOURCES__LEVEL());
         env_res_color_map = emp::GetHueMap(TOTAL_RESOURCES, 0, 250, 85, 50);
+        ConfigCanvasSize();
         RedrawWorldCanvas();
         stats_view.Redraw();
       }
