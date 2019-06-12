@@ -951,19 +951,18 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     const size_t offspring_cell_id = deme.GetNeighboringCellID(cell_id, deme.GetCellFacing(cell_id));
     // Not allowed to reproduce over yourself?
     if (offspring_cell_id == cell_id) {
-      std::cout << "Organism ("<<cell_id<<") trying to birth over itself("<<offspring_cell_id<<")?" << std::endl;
-      std::cout << "Facing? " << deme.FacingStr(deme.GetCellFacing(cell_id)) << std::endl;
-      std::cout << "Neighbor? " << deme.GetNeighboringCellID(cell_id, deme.GetCellFacing(cell_id)) << std::endl;
-      std::cout << "Neighbor map: "<< std::endl;
-      deme.PrintNeighborMap();
-      std::cout << "================" << std::endl;
-      for (size_t id = 0; id < deme.GetCellCapacity(); ++id) {
-        size_t world_id = deme.GetCell(id).GetDemeID();
-        size_t cell_id = deme.GetCell(id).GetCellID();
-        std::cout << "  Deme-"<< deme.GetDemeID()<<" Cell " << id << ": world_id ="<< world_id <<"; cell_id ="<< cell_id <<";" << std::endl;
-      }
-      exit(0);
-
+      // std::cout << "Organism ("<<cell_id<<") trying to birth over itself("<<offspring_cell_id<<")?" << std::endl;
+      // std::cout << "Facing? " << deme.FacingStr(deme.GetCellFacing(cell_id)) << std::endl;
+      // std::cout << "Neighbor? " << deme.GetNeighboringCellID(cell_id, deme.GetCellFacing(cell_id)) << std::endl;
+      // std::cout << "Neighbor map: "<< std::endl;
+      // deme.PrintNeighborMap();
+      // std::cout << "================" << std::endl;
+      // for (size_t id = 0; id < deme.GetCellCapacity(); ++id) {
+        // size_t world_id = deme.GetCell(id).GetDemeID();
+        // size_t cell_id = deme.GetCell(id).GetCellID();
+        // std::cout << "  Deme-"<< deme.GetDemeID()<<" Cell " << id << ": world_id ="<< world_id <<"; cell_id ="<< cell_id <<";" << std::endl;
+      // }
+      // exit(0);
       return;
     }
     // If that location is already active, reset it (killing existing cell)
@@ -977,7 +976,10 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
                                                  sgp_memory_t(),                // What should input memory of init function call be?
                                                  false,                         // Should init function be a 'main'?
                                                  cell.repro_tag_locked);        // Should offspring's repro tag be locked?
+    deme.GetCell(offspring_cell_id).new_born = true;
     // pay costs of reproduction
+    // WARNING - if cells allowed to reproduce over themselves, this will be a
+    // bad reference (currently disallowed)
     cell.local_resources -= TISSUE_ACCRETION_COST;
   };
 

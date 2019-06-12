@@ -55,6 +55,7 @@ public:
     Facing cell_facing = Facing::N;
     tag_t repro_tag = tag_t();
     bool repro_tag_locked = false;
+    bool new_born = false;
     sgp_hardware_t sgp_hw;
 
     emp::vector<bool> resource_sensors;         ///< One sensor per resource
@@ -72,6 +73,7 @@ public:
       emp_assert(resource_sensors.size() == metabolized_on_advance.size());
       sgp_hw.ResetProgram();
       active = false;
+      new_born = false;
       repro_tag.Clear();
       repro_tag_locked = false;
       for (size_t i = 0; i < resource_sensors.size(); ++i) {
@@ -249,6 +251,7 @@ public:
     for (CellularHardware & cell : cells) {
       for (size_t m = 0; m < cell.metabolized_on_advance.size(); ++m) {
         cell.metabolized_on_advance[m] = false;
+        cell.new_born = false; // If cell was new born prior to this, it isn't anymore
       }
     }
     // Advance the deme hardware!
@@ -261,12 +264,12 @@ public:
     // Advance cells in random order
     emp::Shuffle(*random_ptr, cell_schedule);
     for (size_t id : cell_schedule) {
-      if (!cells[id].active) {
+      if (!cells[id].active || cells[id].new_born) {
         continue;
       }
       CellularHardware & cell = cells[id];
       cell.AdvanceStep(); // Advance cell by one step
-      // todo - if no threads and no sensors => mark as deactivated!
+      // todo - if no threads and no sensors => mark as deactivated! => Maybe not?
     }
   }
 
