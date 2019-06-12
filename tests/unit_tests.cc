@@ -477,12 +477,47 @@ TEST_CASE ( "Mutator", "[mutator]") {
   }
 }
 
-TEST_CASE ("Utilities - GenRandTag") {
-  // todo
+TEST_CASE ("Utilities - GenRandTag", "[utilities]") {
+  constexpr size_t TWIDTH = 4;
+  using tag_t = emp::BitSet<TWIDTH>;
+
+  emp::Random rnd(10);
+
+  // Generate a few random tags - make sure function doesn't fail
+  for (size_t i = 0; i < 10; ++i) {
+    tag_t tag = GenRandTag<TWIDTH>(rnd);
+  }
+
+  // Generate all 16 possible tags
+  emp::vector<tag_t> tags;
+  for (size_t i = 0; i < 16; ++i) {
+    tags.emplace_back(GenRandTag<TWIDTH>(rnd, tags));
+  }
 }
 
-TEST_CASE ("Utilities - GenRandTags") {
-  // todo
+TEST_CASE ("Utilities - GenRandTags", "[utilities]") {
+  constexpr size_t TWIDTH = 4;
+  using tag_t = emp::BitSet<TWIDTH>;
+
+  emp::Random rnd(10);
+
+  // Generate a few random tags - make sure function doesn't fail
+  emp::vector<tag_t> tags;
+  for (size_t i = 0; i < 10; ++i) {
+    tags = GenRandTags<TWIDTH>(rnd, 4, true);
+    tags = GenRandTags<TWIDTH>(rnd, 4, false);
+  }
+
+  for (size_t i = 0; i < 100; ++i) {
+    emp::vector<tag_t> tags_1 = GenRandTags<TWIDTH>(rnd, 8, true);
+    emp::vector<tag_t> tags_2 = GenRandTags<TWIDTH>(rnd, 4, true, tags_1);
+    // make sure nothing in tags_1 == tags_2
+    for (size_t t1 = 0; t1 < tags_1.size(); ++t1) {
+      for (size_t t2 = 0; t2 < tags_2.size(); ++t2) {
+        REQUIRE(tags_1[t1] != tags_2[t2]);
+      }
+    }
+  }
 }
 
 TEST_CASE ("Utilities - GenHadamardMatrix") {
