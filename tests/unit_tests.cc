@@ -560,5 +560,7 @@ TEST_CASE ("Utilities - to_titlecase") {
 }
 
 TEST_CASE ("Utilities - join") {
-  // todo
+  std::string s1 = ",";
+  emp::vector<std::string> vec = {"hello","world","again"};
+  REQUIRE(join(vec, s1) == "hello,world,again");
 }
