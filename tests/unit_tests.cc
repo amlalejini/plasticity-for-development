@@ -11,14 +11,6 @@
 // Tests
 // - [ ] Test that phenotypes are property reset on birth/placement!
 
-TEST_CASE( "First test!", "[first]" ) {
-  REQUIRE(true);
-  TestStruct s;
-  s.a = 5;
-  s.b = 10;
-  REQUIRE(s.Add() == 15);
-}
-
 TEST_CASE( "DOLWorld Setup - Configuration Initialization", "[world][setup]" ) {
   // Create a configuration object
   DOLWorldConfig config;
