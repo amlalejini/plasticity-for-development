@@ -11,6 +11,9 @@
 
 // Tests
 // - [ ] Test that phenotypes are property reset on birth/placement!
+// - [ ] INIT_POP_MODE == "load-single"
+// - [ ] Resources as hadamard
+// - [ ] World reset
 
 TEST_CASE( "DOLWorld Setup - Configuration Initialization", "[world][setup]" ) {
   // Create a configuration object
@@ -31,6 +34,20 @@ TEST_CASE( "DOLWorld Setup - Configuration Initialization", "[world][setup]" ) {
   REQUIRE(world.GetDemeHeight() == 2);
   REQUIRE(world.GetDemeCapacity() == 4);
   REQUIRE(world.GetCPUCyclesPerUpdate() == 3);
+  REQUIRE(world.GetSize() == 200);
+  world.RunStep();
+
+  config.LOAD_ANCESTOR_INDIV_FPATH("tests/test-configs/single-static-task.gp");
+  config.INIT_POP_MODE("load-single");
+  config.MAX_POP_SIZE(500);
+  config.DEME_WIDTH(16);
+  config.DEME_HEIGHT(16);
+
+  world.Reset(config);
+  REQUIRE(world.GetSize() == 500);
+  REQUIRE(world.GetDemeWidth() == 16);
+  REQUIRE(world.GetDemeHeight() == 16);
+  world.RunStep();
 }
 
 TEST_CASE ( "Deme - Topology", "[deme]" ) {
