@@ -127,6 +127,54 @@ protected:
     }
   };
 
+  canvas_draw_fun_t draw_deme_cell_metabolism = [this]() {
+    world_display.Clear("white");
+
+    for (size_t deme_id = 0; deme_id < demes.size(); ++deme_id) {
+      Deme & deme = GetDeme(deme_id);
+      // What's this deme's row/column id?
+      const size_t deme_row = deme_id / num_deme_cols;
+      const size_t deme_col = deme_id % num_deme_cols;
+      const double margin = DEME_MARGIN_SIZE/2.0;
+      const double deme_x = (deme_col * deme_width) + margin;
+      const double deme_y = (deme_row * deme_height) + margin;
+      if (deme.IsActive()) {
+        // world_display.Rect(deme_x, deme_y, deme_width - margin, deme_height - margin, "white", "white");
+        // Draw Cells
+        for (size_t cell_id = 0; cell_id < deme.GetCellCapacity(); ++cell_id) {
+          Deme::CellularHardware & cell = deme.GetCell(cell_id);
+          const size_t cell_col = deme.GetCellX(cell_id);
+          const size_t cell_row = deme.GetCellY(cell_id);
+          const double cell_x = deme_x + (cell_col * DEME_CELL_SIZE);
+          const double cell_y = deme_y + (cell_row * DEME_CELL_SIZE);
+          if (deme.IsCellActive(cell_id)) {
+            // Alive cell => tan
+            world_display.Rect(cell_x, cell_y, DEME_CELL_SIZE, DEME_CELL_SIZE, "tan", "black");
+
+            // Display resource consumption
+            if (TOTAL_RESOURCES > 0) {
+              const double bar_height = DEME_CELL_SIZE / (double)TOTAL_RESOURCES;
+              const double bar_width = DEME_CELL_SIZE;
+              for (size_t res_id = 0; res_id < TOTAL_RESOURCES; ++res_id) {
+                const double res_x = cell_x;
+                const double res_y = cell_y + (bar_height*res_id);
+                if (cell.metabolized_on_advance[res_id]) {
+                  world_display.Rect(res_x, res_y, bar_width, bar_height, env_res_color_fun(res_id), "black");
+                } else {
+                  world_display.Rect(res_x, res_y, bar_width, bar_height, "tan", "black");
+                }
+              }
+            }
+          } else {
+            world_display.Rect(cell_x, cell_y, DEME_CELL_SIZE, DEME_CELL_SIZE, "grey", "black");
+          }
+        }
+      } else {
+        world_display.Rect(deme_x, deme_y, deme_width-DEME_MARGIN_SIZE, deme_height-DEME_MARGIN_SIZE, "black");
+      }
+    }
+  };
+
   canvas_draw_fun_t draw_env_res_levels = [this]() {
     world_display.Clear("white");
     for (size_t env_id = 0; env_id < environments.size(); ++env_id) {
@@ -364,6 +412,14 @@ public:
                                        });
                                        RedrawWorldCanvas();
                                      }, 0);
+    world_display_selector.SetOption("Demes - Cell Metabolism",
+                                     [this]() {
+                                       canvas_draw_fun = draw_deme_cell_metabolism;
+                                       EM_ASM({
+                                         $('#world-view-card-header').html('World View - Demes - Cell Metabolism');
+                                       });
+                                       RedrawWorldCanvas();
+                                     }, 1);
     world_display_selector.SetOption("Environments - Resource Levels",
                                      [this]() {
                                        canvas_draw_fun = draw_env_res_levels;
@@ -371,7 +427,7 @@ public:
                                          $('#world-view-card-header').html('World View - Environment - Resource Levels');
                                        });
                                        RedrawWorldCanvas();
-                                     }, 1);
+                                     }, 2);
     world_display_selector.SetAttr("class", "custom-select");
 
     canvas_draw_fun = draw_deme_cell_sensors;
