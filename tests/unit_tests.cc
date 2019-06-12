@@ -548,7 +548,15 @@ TEST_CASE ("Utilities - GenHadamardMatrix") {
 }
 
 TEST_CASE ("Utilities - to_titlecase") {
-  // todo
+  std::string s1 = "HELLO WORLD";
+  std::string s2 = "HeLlO wOrLd";
+  std::string s3 = "hello world";
+  std::string s4 = "Hello World";
+
+  REQUIRE(to_titlecase(s1) == "Hello World");
+  REQUIRE(to_titlecase(s2) == "Hello World");
+  REQUIRE(to_titlecase(s3) == "Hello World");
+  REQUIRE(to_titlecase(s4) == "Hello World");
 }
 
 TEST_CASE ("Utilities - join") {
