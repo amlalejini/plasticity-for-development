@@ -976,7 +976,12 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
                                                  sgp_memory_t(),                // What should input memory of init function call be?
                                                  false,                         // Should init function be a 'main'?
                                                  cell.repro_tag_locked);        // Should offspring's repro tag be locked?
+    // mark cell as new born
     deme.GetCell(offspring_cell_id).new_born = true;
+    // rotate cell to face parent
+    const size_t child_dir = (size_t)emp::Mod((int)(cell.cell_facing + 4), (int)Deme::NUM_DIRECTIONS);
+    deme.GetCell(offspring_cell_id).cell_facing = Deme::Dir[child_dir];
+    // std::cout << "My direction: ";
     // pay costs of reproduction
     // WARNING - if cells allowed to reproduce over themselves, this will be a
     // bad reference (currently disallowed)
