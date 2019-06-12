@@ -1,7 +1,6 @@
 #define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
 #include "catch.hpp"
 
-#include "TestStruct.h"
 #include "Deme.h"
 #include "DOLWorld.h"
 #include "DOLWorldConfig.h"
@@ -431,4 +430,24 @@ TEST_CASE ( "Resource", "[resource]") {
 
 TEST_CASE ( "Mutator", "[mutator]") {
   // todo!
+}
+
+TEST_CASE ("Utilities - GenRandTag") {
+  // todo
+}
+
+TEST_CASE ("Utilities - GenRandTags") {
+  // todo
+}
+
+TEST_CASE ("Utilities - GenHadamardMatrix") {
+  // todo
+}
+
+TEST_CASE ("Utilities - to_titlecase") {
+  // todo
+}
+
+TEST_CASE ("Utilities - join") {
+  // todo
 }
