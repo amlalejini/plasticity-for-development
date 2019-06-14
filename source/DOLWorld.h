@@ -848,6 +848,7 @@ void DOLWorld::Setup(DOLWorldConfig & config) {
     // - Program = genome's program, entry point tag = genome's birth tag, initial input memory = empty,
     //   entry point function main? = no, lock in entry point tag? = no
     cell_hw.ActivateCell(org.GetGenome().program, org.GetGenome().birth_tag, sgp_memory_t(), false, false);
+    cell_hw.cell_facing = Deme::Facing::N;
   };
 
   // What happens when an organism consumes a resource?
